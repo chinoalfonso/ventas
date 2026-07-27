@@ -187,6 +187,65 @@
       </div>
     </section>
 
+    <!-- FILA 2b: Detalle mensual/surtido + Impuesto -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="card p-5">
+        <h3 class="font-display text-base mb-1">Ventas y costos por mes y por surtido</h3>
+        <p class="text-xs text-[var(--muted)] mb-3">Resumen mensual y desglose de ventas por categoría (surtido) en cada mes.</p>
+
+        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2">Por mes</p>
+        <div class="overflow-auto rounded-lg border border-[var(--line)] mb-5">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs uppercase tracking-wide text-[var(--muted)] border-b border-[var(--line)]">
+                <th class="py-2 px-3">Mes</th>
+                <th class="py-2 px-3 text-right">Ventas</th>
+                <th class="py-2 px-3 text-right">Costos</th>
+                <th class="py-2 px-3 text-right">Ganancia</th>
+                <th class="py-2 px-3 text-right">Margen %</th>
+              </tr>
+            </thead>
+            <tbody id="monthlyTableBody"></tbody>
+          </table>
+        </div>
+
+        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2">Por surtido y mes (ventas)</p>
+        <div class="overflow-auto rounded-lg border border-[var(--line)]">
+          <table class="w-full text-sm whitespace-nowrap">
+            <thead>
+              <tr id="assortmentTableHead" class="text-left text-xs uppercase tracking-wide text-[var(--muted)] border-b border-[var(--line)]"></tr>
+            </thead>
+            <tbody id="assortmentTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card p-5">
+        <h3 class="font-display text-base mb-1">Impuesto sobre las ventas</h3>
+        <p class="text-xs text-[var(--muted)] mb-3">Se calcula al 10% del total de ventas, según normativa vigente para el negocio.</p>
+
+        <div class="rounded-lg p-4 mb-4" style="background:#FAF3EA; border:1px solid var(--line);">
+          <p class="text-xs uppercase tracking-wide text-[var(--muted)]">Impuesto total del periodo filtrado</p>
+          <p id="taxTotalValue" class="kpi-value text-3xl mt-1" style="color:var(--clay-dark)">—</p>
+          <p id="taxTotalSub" class="text-xs text-[var(--muted)] mt-1"></p>
+        </div>
+
+        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2">Por mes</p>
+        <div class="overflow-auto rounded-lg border border-[var(--line)]">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs uppercase tracking-wide text-[var(--muted)] border-b border-[var(--line)]">
+                <th class="py-2 px-3">Mes</th>
+                <th class="py-2 px-3 text-right">Ventas</th>
+                <th class="py-2 px-3 text-right">Impuesto (10%)</th>
+              </tr>
+            </thead>
+            <tbody id="taxTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- FÓRMULAS: PARETO Y RAZONES FINANCIERAS -->
     <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card p-6">
@@ -438,6 +497,8 @@ function renderAll(){
   renderBarVC(filtered, topN);
   renderDonut(filtered);
   renderLine(filtered);
+  renderMonthlyTables(filtered);
+  renderTax(filtered);
   renderPareto(filtered, topN);
   renderFormulas(filtered);
   renderRatiosChart(filtered);
@@ -644,6 +705,77 @@ function renderLine(rows){
       scales:{ y:{ ticks:{ callback:(v)=>fmtNum(v) } } }
     }
   });
+}
+
+/* ============ VENTAS/COSTOS POR MES Y POR SURTIDO ============ */
+function pivotCategoryMonth(rows){
+  const cats = [...new Set(rows.map(r => r.cat))].sort();
+  const months = [...new Set(rows.map(r => r.month))].sort((a,b) => monthIndex(a) - monthIndex(b));
+  const matrix = {};
+  cats.forEach(c => { matrix[c] = {}; months.forEach(m => matrix[c][m] = 0); });
+  for (const r of rows){ matrix[r.cat][r.month] = (matrix[r.cat][r.month] || 0) + r.importe; }
+  return { cats, months, matrix };
+}
+
+function renderMonthlyTables(rows){
+  const monthlyBody = document.getElementById('monthlyTableBody');
+  const headEl = document.getElementById('assortmentTableHead');
+  const bodyEl = document.getElementById('assortmentTableBody');
+
+  if (rows.length === 0){
+    monthlyBody.innerHTML = ''; headEl.innerHTML = ''; bodyEl.innerHTML = '';
+    return;
+  }
+
+  const porMes = groupByMonth(rows).map(g => ({ ...g, margen: g.importe > 0 ? (g.importe-g.cost)/g.importe*100 : 0 }));
+  monthlyBody.innerHTML = porMes.map(g => `
+    <tr class="border-b border-[var(--line)] last:border-0">
+      <td class="py-2 px-3">${monthLabel(g.month)}</td>
+      <td class="py-2 px-3 text-right">${fmtMoney(g.importe)}</td>
+      <td class="py-2 px-3 text-right">${fmtMoney(g.cost)}</td>
+      <td class="py-2 px-3 text-right" style="color:var(--sage)">${fmtMoney(g.importe-g.cost)}</td>
+      <td class="py-2 px-3 text-right">${g.margen.toFixed(1)}%</td>
+    </tr>
+  `).join('');
+
+  const { cats, months, matrix } = pivotCategoryMonth(rows);
+  headEl.innerHTML = `<th class="py-2 px-3">Surtido</th>` + months.map(m => `<th class="py-2 px-3 text-right">${monthLabel(m)}</th>`).join('') + `<th class="py-2 px-3 text-right">Total</th>`;
+  bodyEl.innerHTML = cats.map(c => {
+    const total = months.reduce((s,m) => s + (matrix[c][m] || 0), 0);
+    return `<tr class="border-b border-[var(--line)] last:border-0">
+      <td class="py-2 px-3"><span class="text-xs px-2 py-0.5 rounded-full ${CAT_BADGE[c] || ''}">${c}</span></td>
+      ${months.map(m => `<td class="py-2 px-3 text-right">${fmtMoney(matrix[c][m] || 0)}</td>`).join('')}
+      <td class="py-2 px-3 text-right font-semibold">${fmtMoney(total)}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ============ IMPUESTO SOBRE LAS VENTAS (10%) ============ */
+const TAX_RATE = 0.10;
+
+function renderTax(rows){
+  const totalEl = document.getElementById('taxTotalValue');
+  const subEl = document.getElementById('taxTotalSub');
+  const bodyEl = document.getElementById('taxTableBody');
+
+  if (rows.length === 0){
+    totalEl.textContent = '—'; subEl.textContent = ''; bodyEl.innerHTML = '';
+    return;
+  }
+
+  const ventas = rows.reduce((s,r) => s + r.importe, 0);
+  const impuestoTotal = ventas * TAX_RATE;
+  totalEl.textContent = fmtMoney(impuestoTotal);
+  subEl.textContent = `10% sobre ${fmtMoney(ventas)} en ventas`;
+
+  const porMes = groupByMonth(rows);
+  bodyEl.innerHTML = porMes.map(g => `
+    <tr class="border-b border-[var(--line)] last:border-0">
+      <td class="py-2 px-3">${monthLabel(g.month)}</td>
+      <td class="py-2 px-3 text-right">${fmtMoney(g.importe)}</td>
+      <td class="py-2 px-3 text-right" style="color:var(--clay-dark)">${fmtMoney(g.importe * TAX_RATE)}</td>
+    </tr>
+  `).join('');
 }
 
 function renderPareto(rows, topN){
