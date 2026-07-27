@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDL NOSOTROS · Panel de Ventas 2026</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#2B2420;
+    --clay:#B5502F;
+    --clay-dark:#8C3B22;
+    --sage:#5C7A52;
+    --amber:#C99A3E;
+    --paper:#FAF7F2;
+    --card:#FFFFFF;
+    --line:#E7DFD3;
+    --muted:#7A6F63;
+  }
+  html,body{background:var(--paper); color:var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;}
+  .font-display{ font-family: Georgia, "Iowan Old Style", "Times New Roman", serif; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; }
+  .kpi-value{ font-family: Georgia, serif; font-variant-numeric: tabular-nums; }
+  .chip{ border:1px solid var(--line); background:#fff; }
+  .chip.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  select, input[type=text]{ background:#fff; border:1px solid var(--line); border-radius:8px; }
+  ::-webkit-scrollbar{ height:8px; width:8px; }
+  ::-webkit-scrollbar-thumb{ background:#D8CCBB; border-radius:8px; }
+  .dropzone{ border:2px dashed var(--line); transition: all .15s ease; }
+  .dropzone.drag{ border-color:var(--clay); background:#FBF1EA; }
+  th{ position:sticky; top:0; background:#FAF7F2; }
+  .badge-barro{ background:#B5502F1a; color:var(--clay-dark); }
+  .badge-plantas{ background:#5C7A521a; color:var(--sage); }
+  .badge-manualidades{ background:#C99A3E22; color:#8a6a24; }
+  .badge-ok{ background:#5C7A521a; color:var(--sage); }
+  .badge-warn{ background:#C99A3E22; color:#8a6a24; }
+  .badge-alert{ background:#B5502F1a; color:var(--clay-dark); }
+  @media print{ .no-print{ display:none !important; } }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- HEADER -->
+<header class="border-b border-[var(--line)] bg-white/70 backdrop-blur sticky top-0 z-30">
+  <div class="max-w-7xl mx-auto px-5 py-4 flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white font-display text-lg" style="background:linear-gradient(135deg,var(--clay),var(--clay-dark));">P</div>
+      <div>
+        <h1 class="font-display text-xl leading-tight">PDL NOSOTROS</h1>
+        <p class="text-xs text-[var(--muted)]">Panel interactivo de ventas 2026 · Barro, Plantas Ornamentales y Manualidades</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap">
+      <div id="fileStatus" class="text-xs text-[var(--muted)] hidden sm:block max-w-[260px] truncate"></div>
+      <label class="cursor-pointer">
+        <span class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium" style="background:var(--clay);">
+          ⭯ Cargar / Recargar Excel
+        </span>
+        <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+      </label>
+    </div>
+  </div>
+</header>
+
+<!-- BANNER -->
+<div id="banner" class="max-w-7xl mx-auto px-5 pt-4 hidden"></div>
+
+<main class="max-w-7xl mx-auto px-5 py-6 space-y-6">
+
+  <!-- DROPZONE (visible solo si no hay datos) -->
+  <div id="emptyState" class="hidden dropzone rounded-2xl p-10 text-center">
+    <p class="font-display text-lg mb-1">Aún no hay datos cargados</p>
+    <p class="text-sm text-[var(--muted)]">Arrastra aquí tu archivo .xlsx / .xls / .csv, o usa el botón "Cargar Excel" arriba.</p>
+  </div>
+
+  <div id="dashboardRoot" class="space-y-6">
+
+    <!-- FILTROS -->
+    <section class="card p-4">
+      <div class="flex flex-wrap items-end gap-4">
+        <div>
+          <label class="block text-xs text-[var(--muted)] mb-1">Categoría</label>
+          <select id="filterCat" class="px-3 py-2 text-sm"><option value="all">Todas</option></select>
+        </div>
+        <div>
+          <label class="block text-xs text-[var(--muted)] mb-1">Mes</label>
+          <select id="filterMonth" class="px-3 py-2 text-sm"><option value="all">Todos</option></select>
+        </div>
+        <div>
+          <label class="block text-xs text-[var(--muted)] mb-1">Buscar producto</label>
+          <input id="filterSearch" type="text" placeholder="Ej. maceta, cesta…" class="px-3 py-2 text-sm w-52">
+        </div>
+        <div>
+          <label class="block text-xs text-[var(--muted)] mb-1">Top productos (gráficos)</label>
+          <select id="filterTopN" class="px-3 py-2 text-sm">
+            <option value="8">Top 8</option>
+            <option value="10" selected>Top 10</option>
+            <option value="15">Top 15</option>
+            <option value="20">Top 20</option>
+          </select>
+        </div>
+        <button id="resetFilters" class="ml-auto text-sm px-3 py-2 rounded-lg chip">Limpiar filtros</button>
+      </div>
+    </section>
+
+    <!-- KPIs -->
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="card p-5">
+        <p class="text-xs uppercase tracking-wide text-[var(--muted)]">Ventas totales</p>
+        <p id="kpiVentas" class="kpi-value text-3xl mt-1" style="color:var(--clay-dark)">—</p>
+        <p id="kpiVentasSub" class="text-xs text-[var(--muted)] mt-1"></p>
+      </div>
+      <div class="card p-5">
+        <p class="text-xs uppercase tracking-wide text-[var(--muted)]">Costos totales</p>
+        <p id="kpiCostos" class="kpi-value text-3xl mt-1" style="color:var(--muted)">—</p>
+        <p id="kpiCostosSub" class="text-xs text-[var(--muted)] mt-1"></p>
+      </div>
+      <div class="card p-5">
+        <p class="text-xs uppercase tracking-wide text-[var(--muted)]">Ganancia neta</p>
+        <p id="kpiGanancia" class="kpi-value text-3xl mt-1" style="color:var(--sage)">—</p>
+        <p id="kpiGananciaSub" class="text-xs text-[var(--muted)] mt-1"></p>
+      </div>
+    </section>
+
+    <!-- INSIGHT AUTOMÁTICO -->
+    <section class="card p-5" style="border-color:#B5502F55; background:linear-gradient(135deg,#FFF7F1,#FFFFFF);">
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm shrink-0" style="background:linear-gradient(135deg,var(--clay),var(--clay-dark));">💡</div>
+        <div>
+          <p class="text-xs uppercase tracking-wide text-[var(--muted)] mb-1">Insight automático</p>
+          <p id="insightText" class="text-sm leading-relaxed">—</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESUMEN PROFESIONAL -->
+    <section class="card p-6">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="font-display text-lg">Análisis profesional de ventas</h3>
+        <span class="text-xs text-[var(--muted)]">Generado a partir de los datos y filtros activos</span>
+      </div>
+      <p id="summaryExec" class="text-sm text-[var(--ink)]/90 leading-relaxed mt-2 mb-5"></p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div>
+          <h4 class="text-sm font-semibold mb-2 flex items-center gap-2" style="color:var(--sage)">✓ Fortalezas</h4>
+          <ul id="summaryStrengths" class="text-sm space-y-2 text-[var(--ink)]/90"></ul>
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold mb-2 flex items-center gap-2" style="color:var(--clay-dark)">⚠ Aspectos a mejorar</h4>
+          <ul id="summaryWeaknesses" class="text-sm space-y-2 text-[var(--ink)]/90"></ul>
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold mb-2 flex items-center gap-2" style="color:var(--amber)">↗ Estrategias y plan de acción</h4>
+          <ul id="summaryStrategy" class="text-sm space-y-2 text-[var(--ink)]/90"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- FILA 1: Barras Ventas vs Costos + Dona -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="card p-5 lg:col-span-2">
+        <h3 class="font-display text-base mb-1">Ventas vs Costos por producto</h3>
+        <p class="text-xs text-[var(--muted)] mb-3">Según filtros activos, ordenado por importe de venta.</p>
+        <div class="h-80"><canvas id="chartBarVC"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h3 class="font-display text-base mb-1">Distribución de unidades vendidas</h3>
+        <p class="text-xs text-[var(--muted)] mb-3">Por categoría · <span title="El archivo no contiene un campo de existencias (stock); se usa la cantidad vendida como aproximación del movimiento de inventario.">nota ⓘ</span></p>
+        <div class="h-80"><canvas id="chartDonut"></canvas></div>
+      </div>
+    </section>
+
+    <!-- FILA 2: Evolución mensual + Pareto -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="card p-5">
+        <h3 class="font-display text-base mb-1">Evolución mensual: Ventas vs Costos</h3>
+        <p class="text-xs text-[var(--muted)] mb-3">Según categoría filtrada.</p>
+        <div class="h-72"><canvas id="chartLine"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h3 class="font-display text-base mb-1">Análisis de Pareto (80/20)</h3>
+        <p class="text-xs text-[var(--muted)] mb-3">Productos ordenados por venta acumulada.</p>
+        <div class="h-72"><canvas id="chartPareto"></canvas></div>
+      </div>
+    </section>
+
+    <!-- FÓRMULAS: PARETO Y RAZONES FINANCIERAS -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="card p-6">
+        <h3 class="font-display text-base mb-3">Principio de Pareto (80/20)</h3>
+        <div class="rounded-lg p-4 text-sm mb-4" style="background:#FAF3EA; border:1px solid var(--line);">
+          <p class="font-display text-base mb-1">% Concentración = ( Σ Ventas Top 20% productos ÷ Σ Ventas totales ) × 100</p>
+          <p class="text-xs text-[var(--muted)]">Regla general: aproximadamente el 80% de los resultados proviene del 20% de las causas.</p>
+        </div>
+        <p id="paretoInterpretacion" class="text-sm leading-relaxed"></p>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-display text-base mb-1">Razones financieras</h3>
+        <p class="text-xs text-[var(--muted)] mb-4">Qué significa cada número para el negocio, en lenguaje simple.</p>
+        <div id="ratiosCards" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-1 gap-4">
+      <div class="card p-5">
+        <h3 class="font-display text-base mb-1">Razones financieras por categoría</h3>
+        <p class="text-xs text-[var(--muted)] mb-3">Margen, Markup y Eficiencia de costo (%) comparados entre categorías, según filtros activos.</p>
+        <div class="h-80 max-w-xl mx-auto"><canvas id="chartRatios"></canvas></div>
+      </div>
+    </section>
+
+    <!-- FILA 3: Margen -->
+    <section class="grid grid-cols-1 gap-4">
+      <div class="card p-5">
+        <h3 class="font-display text-base mb-1">Top productos por margen (%)</h3>
+        <p class="text-xs text-[var(--muted)] mb-3">Solo productos con venta acumulada relevante en el periodo filtrado.</p>
+        <div class="h-80"><canvas id="chartMargin"></canvas></div>
+      </div>
+    </section>
+
+    <!-- TABLA -->
+    <section class="card p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-display text-base">Detalle de productos</h3>
+        <p class="text-xs text-[var(--muted)]" id="tableCount"></p>
+      </div>
+      <div class="overflow-auto max-h-96 rounded-lg border border-[var(--line)]">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs uppercase tracking-wide text-[var(--muted)] border-b border-[var(--line)]">
+              <th class="py-2 px-3 cursor-pointer" data-sort="cat">Categoría</th>
+              <th class="py-2 px-3 cursor-pointer" data-sort="prod">Producto</th>
+              <th class="py-2 px-3 cursor-pointer text-right" data-sort="qty">Cantidad</th>
+              <th class="py-2 px-3 cursor-pointer text-right" data-sort="cost">Costo</th>
+              <th class="py-2 px-3 cursor-pointer text-right" data-sort="importe">Venta</th>
+              <th class="py-2 px-3 cursor-pointer text-right" data-sort="margin">Ganancia</th>
+              <th class="py-2 px-3 cursor-pointer text-right" data-sort="marginPct">Margen %</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer class="mt-4 py-8 px-5 text-center" style="background:var(--ink); color:#F4EFE7;">
+  <div class="max-w-7xl mx-auto space-y-2">
+    <p class="text-xs" style="color:#C9BEAF;">Panel autocontenido · Tailwind CSS + Chart.js + SheetJS · Puedes recargar un Excel actualizado en cualquier momento sin perder la vista actual.</p>
+    <p class="italic text-sm" style="color:#E7DFD3;">"Los datos no venden por sí solos: son el mapa que le muestra al equipo de ventas dónde está el tesoro."</p>
+    <p class="text-xs tracking-wide" style="color:#C9BEAF;">Prog. Juan Alfonso Echevarría Castro. · Todos los Derechos Reservados.</p>
+  </div>
+</footer>
+
+<script>
+/* ============ ESTADO GLOBAL ============ */
+let RAW = [];
+let charts = {};
+let sortState = { key: 'importe', dir: 'desc' };
+
+const MONTH_ORDER = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+const CAT_COLORS = { 'Barro':'#B5502F', 'Plantas Ornamentales':'#5C7A52', 'Manualidades':'#C99A3E' };
+const CAT_BADGE = { 'Barro':'badge-barro', 'Plantas Ornamentales':'badge-plantas', 'Manualidades':'badge-manualidades' };
+
+function fmtMoney(n){ return new Intl.NumberFormat('es-CU', {maximumFractionDigits:0}).format(Math.round(n||0)) + ' CUP'; }
+function fmtNum(n){ return new Intl.NumberFormat('es-CU', {maximumFractionDigits:0}).format(Math.round(n||0)); }
+function titleCase(s){ return s.replace(/\S+/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()); }
+function toNum(x){ if (typeof x === 'number') return x; const p = parseFloat(x); return isNaN(p) ? 0 : p; }
+function normalize(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
+function monthLabel(m){ return titleCase((m||'').toLowerCase()); }
+function monthIndex(m){ const i = MONTH_ORDER.indexOf((m||'').toUpperCase()); return i === -1 ? 99 : i; }
+
+/* ============ PARSER (header-driven, robusto a orden de columnas) ============ */
+function parseRows(rows2d){
+  if (!rows2d.length) return [];
+  const header = rows2d[0].map(normalize);
+  const idx = {
+    mes: header.findIndex(h => h.startsWith('mes')),
+    cat: header.findIndex(h => h.startsWith('tipo')),
+    prod: header.findIndex(h => h.startsWith('articulo')),
+    qty: header.findIndex(h => h.startsWith('cant')),
+    pcost: header.findIndex(h => h.includes('precio de costo')),
+    pventa: header.findIndex(h => h.includes('valor de venta')),
+    importe: header.findIndex(h => h.startsWith('vendido')),
+    totcost: header.findIndex(h => h.includes('total del costo') || h.includes('total de costo')),
+  };
+  // Fallback a posiciones fijas si no se detectan encabezados esperados
+  if (idx.mes === -1) idx.mes = 0;
+  if (idx.cat === -1) idx.cat = 1;
+  if (idx.prod === -1) idx.prod = 2;
+  if (idx.qty === -1) idx.qty = 3;
+  if (idx.pcost === -1) idx.pcost = 4;
+  if (idx.pventa === -1) idx.pventa = 5;
+  if (idx.importe === -1) idx.importe = 6;
+  if (idx.totcost === -1) idx.totcost = 10;
+
+  const products = [];
+  for (let i = 1; i < rows2d.length; i++){
+    const r = rows2d[i] || [];
+    const mes = r[idx.mes], prod = r[idx.prod];
+    if (mes === undefined || mes === null || String(mes).trim() === '') continue;
+    if (prod === undefined || prod === null || String(prod).trim() === '') continue;
+    const cant = toNum(r[idx.qty]);
+    const importe = toNum(r[idx.importe]);
+    const totcost = toNum(r[idx.totcost]);
+    products.push({
+      month: String(mes).trim().toUpperCase(),
+      cat: titleCase(String(r[idx.cat] || 'Sin categoría').trim()),
+      prod: String(prod).trim(),
+      qty: cant,
+      pcost: toNum(r[idx.pcost]),
+      pventa: toNum(r[idx.pventa]),
+      importe: importe,
+      cost: totcost
+    });
+  }
+  return products;
+}
+
+/* ============ CARGA DE ARCHIVO ============ */
+const fileInput = document.getElementById('fileInput');
+const emptyState = document.getElementById('emptyState');
+const dashboardRoot = document.getElementById('dashboardRoot');
+const fileStatus = document.getElementById('fileStatus');
+const banner = document.getElementById('banner');
+
+function showBanner(msg, type){
+  banner.classList.remove('hidden');
+  const color = type === 'error' ? '#B5502F' : '#5C7A52';
+  banner.innerHTML = `<div class="card p-3 text-sm" style="border-color:${color}33; background:${color}0d; color:${color};">${msg}</div>`;
+  setTimeout(()=> banner.classList.add('hidden'), 6000);
+}
+
+async function handleFile(file){
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:'array', cellDates:true });
+    const sheetName = wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const rows2d = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
+    const parsed = parseRows(rows2d);
+
+    if (parsed.length === 0){
+      showBanner('No se encontraron filas de productos reconocibles en el archivo. Verifica que mantenga las columnas: Mes, Tipo, Artículo, Cant, Precio de costo, Valor de venta, Vendido, Total del costo.', 'error');
+      return;
+    }
+
+    RAW = parsed;
+    fileStatus.textContent = `${file.name} · ${parsed.length} filas · actualizado ${new Date().toLocaleTimeString('es-CU')}`;
+    fileStatus.classList.remove('hidden');
+    emptyState.classList.add('hidden');
+    dashboardRoot.classList.remove('hidden');
+    populateFilterOptions();
+    renderAll();
+    showBanner(`Datos cargados correctamente: ${parsed.length} registros de producto.`, 'ok');
+  } catch (err){
+    console.error(err);
+    showBanner('No se pudo leer el archivo. Asegúrate de que sea un .xlsx, .xls o .csv válido.', 'error');
+  }
+}
+
+fileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if (f) handleFile(f); });
+['dragover','dragenter'].forEach(ev => emptyState.addEventListener(ev, (e)=>{ e.preventDefault(); emptyState.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => emptyState.addEventListener(ev, (e)=>{ e.preventDefault(); emptyState.classList.remove('drag'); }));
+emptyState.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+
+/* ============ FILTROS ============ */
+const filterCat = document.getElementById('filterCat');
+const filterMonth = document.getElementById('filterMonth');
+const filterSearch = document.getElementById('filterSearch');
+const filterTopN = document.getElementById('filterTopN');
+document.getElementById('resetFilters').addEventListener('click', () => {
+  filterCat.value = 'all'; filterMonth.value = 'all'; filterSearch.value = ''; filterTopN.value = '10';
+  renderAll();
+});
+[filterCat, filterMonth, filterTopN].forEach(el => el.addEventListener('change', renderAll));
+filterSearch.addEventListener('input', debounce(renderAll, 200));
+function debounce(fn, ms){ let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a), ms); }; }
+
+function populateFilterOptions(){
+  const cats = [...new Set(RAW.map(p => p.cat))].sort();
+  filterCat.innerHTML = '<option value="all">Todas</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+
+  const months = [...new Set(RAW.map(p => p.month))].sort((a,b) => monthIndex(a) - monthIndex(b));
+  filterMonth.innerHTML = '<option value="all">Todos</option>' + months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join('');
+}
+
+function getFiltered(){
+  const cat = filterCat.value, month = filterMonth.value, search = filterSearch.value.trim().toLowerCase();
+  return RAW.filter(p =>
+    (cat === 'all' || p.cat === cat) &&
+    (month === 'all' || p.month === month) &&
+    (!search || p.prod.toLowerCase().includes(search))
+  );
+}
+
+/* ============ AGREGACIONES ============ */
+function groupByProduct(rows){
+  const map = new Map();
+  for (const r of rows){
+    if (!map.has(r.prod)) map.set(r.prod, { prod:r.prod, cat:r.cat, qty:0, cost:0, importe:0 });
+    const g = map.get(r.prod);
+    g.qty += r.qty; g.cost += r.cost; g.importe += r.importe;
+  }
+  return [...map.values()];
+}
+function groupByCategory(rows){
+  const map = new Map();
+  for (const r of rows){
+    if (!map.has(r.cat)) map.set(r.cat, { cat:r.cat, qty:0, cost:0, importe:0 });
+    const g = map.get(r.cat);
+    g.qty += r.qty; g.cost += r.cost; g.importe += r.importe;
+  }
+  return [...map.values()];
+}
+function groupByMonth(rows){
+  const map = new Map();
+  for (const r of rows){
+    if (!map.has(r.month)) map.set(r.month, { month:r.month, cost:0, importe:0 });
+    const g = map.get(r.month);
+    g.cost += r.cost; g.importe += r.importe;
+  }
+  return [...map.values()].sort((a,b) => monthIndex(a.month) - monthIndex(b.month));
+}
+
+/* ============ RENDER ============ */
+function renderAll(){
+  const filtered = getFiltered();
+  const topN = parseInt(filterTopN.value, 10);
+
+  renderKPIs(filtered);
+  renderInsight(filtered);
+  renderSummary(filtered);
+  renderBarVC(filtered, topN);
+  renderDonut(filtered);
+  renderLine(filtered);
+  renderPareto(filtered, topN);
+  renderFormulas(filtered);
+  renderRatiosChart(filtered);
+  renderMargin(filtered);
+  renderTable(filtered);
+}
+
+function renderKPIs(rows){
+  const ventas = rows.reduce((s,r) => s + r.importe, 0);
+  const costos = rows.reduce((s,r) => s + r.cost, 0);
+  const ganancia = ventas - costos;
+  const margen = ventas > 0 ? (ganancia / ventas * 100) : 0;
+
+  document.getElementById('kpiVentas').textContent = fmtMoney(ventas);
+  document.getElementById('kpiCostos').textContent = fmtMoney(costos);
+  document.getElementById('kpiGanancia').textContent = fmtMoney(ganancia);
+  document.getElementById('kpiVentasSub').textContent = `${rows.length} registros de venta`;
+  document.getElementById('kpiCostosSub').textContent = ventas > 0 ? `${(costos/ventas*100).toFixed(1)}% de las ventas` : '';
+  document.getElementById('kpiGananciaSub').textContent = `Margen neto: ${margen.toFixed(1)}%`;
+}
+
+/* ============ INSIGHT AUTOMÁTICO (tarjeta destacada) ============ */
+function renderInsight(rows){
+  const el = document.getElementById('insightText');
+  if (rows.length === 0){ el.textContent = 'No hay datos suficientes con los filtros actuales para generar un insight.'; return; }
+
+  const ventas = rows.reduce((s,r) => s + r.importe, 0);
+  const costos = rows.reduce((s,r) => s + r.cost, 0);
+  const margen = ventas > 0 ? (ventas-costos)/ventas*100 : 0;
+
+  const porCategoria = groupByCategory(rows).map(g => ({ ...g, margen: g.importe>0 ? (g.importe-g.cost)/g.importe*100 : 0, share: ventas>0 ? g.importe/ventas*100 : 0 }));
+  porCategoria.sort((a,b) => b.margen - a.margen);
+  const mejorCat = porCategoria[0];
+
+  const porMes = groupByMonth(rows);
+  let tendenciaDelta = null;
+  if (porMes.length >= 2){
+    const mid = Math.ceil(porMes.length/2);
+    const primera = porMes.slice(0, mid).reduce((s,m)=>s+m.importe,0) / mid;
+    const segunda = porMes.slice(mid).reduce((s,m)=>s+m.importe,0) / Math.max(1, porMes.length-mid);
+    tendenciaDelta = primera > 0 ? (segunda-primera)/primera*100 : 0;
+  }
+
+  const porProducto = groupByProduct(rows).sort((a,b) => b.importe - a.importe);
+  const top20Count = Math.max(1, Math.round(porProducto.length * 0.2));
+  const top20Ventas = porProducto.slice(0, top20Count).reduce((s,p)=>s+p.importe,0);
+  const concentracionPct = ventas > 0 ? top20Ventas/ventas*100 : 0;
+
+  let insight;
+  if (concentracionPct >= 65) {
+    insight = `El ${(top20Count/porProducto.length*100).toFixed(0)}% de los productos (${top20Count} de ${porProducto.length}) concentra el <strong>${concentracionPct.toFixed(0)}% de las ventas</strong>. Hay una fuerte dependencia de pocos productos: conviene diversificar el catálogo para reducir el riesgo.`;
+  } else if (tendenciaDelta !== null && tendenciaDelta <= -15) {
+    insight = `Las ventas muestran una <strong>caída de ${tendenciaDelta.toFixed(1)}%</strong> entre la primera y la segunda mitad del periodo analizado. Es el momento de revisar causas (estacionalidad, demanda, promoción) y activar acciones correctivas.`;
+  } else if (tendenciaDelta !== null && tendenciaDelta >= 15) {
+    insight = `Las ventas muestran un <strong>crecimiento de ${tendenciaDelta.toFixed(1)}%</strong> entre la primera y la segunda mitad del periodo analizado, con un margen neto de ${margen.toFixed(1)}%. Buen momento para reforzar la oferta de los productos que están impulsando este crecimiento.`;
+  } else {
+    insight = `Con ${fmtMoney(ventas)} en ventas y un margen neto de <strong>${margen.toFixed(1)}%</strong>, <strong>${mejorCat.cat}</strong> es la categoría más rentable (margen ${mejorCat.margen.toFixed(1)}%, ${mejorCat.share.toFixed(1)}% de participación). El desempeño general es estable; el mayor potencial de mejora está en elevar el margen de las categorías menos rentables.`;
+  }
+  el.innerHTML = insight;
+}
+
+/* ============ RESUMEN PROFESIONAL (dinámico) ============ */
+function renderSummary(rows){
+  const execEl = document.getElementById('summaryExec');
+  const strEl = document.getElementById('summaryStrengths');
+  const weakEl = document.getElementById('summaryWeaknesses');
+  const stratEl = document.getElementById('summaryStrategy');
+
+  if (rows.length === 0){
+    execEl.textContent = 'No hay datos suficientes con los filtros actuales para generar un análisis.';
+    strEl.innerHTML = weakEl.innerHTML = stratEl.innerHTML = '';
+    return;
+  }
+
+  const ventas = rows.reduce((s,r) => s + r.importe, 0);
+  const costos = rows.reduce((s,r) => s + r.cost, 0);
+  const ganancia = ventas - costos;
+  const margen = ventas > 0 ? ganancia / ventas * 100 : 0;
+
+  const porCategoria = groupByCategory(rows).map(g => ({ ...g, margen: g.importe > 0 ? (g.importe-g.cost)/g.importe*100 : 0, share: ventas>0 ? g.importe/ventas*100 : 0 }));
+  porCategoria.sort((a,b) => b.margen - a.margen);
+  const mejorCat = porCategoria[0];
+  const peorCat = porCategoria[porCategoria.length-1];
+
+  const porMes = groupByMonth(rows).map(g => ({ ...g, margen: g.importe>0 ? (g.importe-g.cost)/g.importe*100 : 0 }));
+  const mejorMes = porMes.length ? [...porMes].sort((a,b)=>b.importe-a.importe)[0] : null;
+  const peorMes = porMes.length ? [...porMes].sort((a,b)=>a.importe-b.importe)[0] : null;
+
+  // Tendencia: comparar primera mitad vs segunda mitad de meses presentes
+  let tendenciaTxt = '';
+  if (porMes.length >= 2){
+    const mid = Math.ceil(porMes.length/2);
+    const primera = porMes.slice(0, mid).reduce((s,m)=>s+m.importe,0) / mid;
+    const segunda = porMes.slice(mid).reduce((s,m)=>s+m.importe,0) / Math.max(1, porMes.length-mid);
+    const delta = primera > 0 ? (segunda-primera)/primera*100 : 0;
+    tendenciaTxt = delta >= 5 ? `una tendencia ascendente (+${delta.toFixed(1)}% entre la primera y la segunda mitad del periodo)` :
+                   delta <= -5 ? `una tendencia a la baja (${delta.toFixed(1)}% entre la primera y la segunda mitad del periodo)` :
+                   'una tendencia relativamente estable mes a mes';
+  }
+
+  // Concentración (Pareto)
+  const porProducto = groupByProduct(rows).sort((a,b) => b.importe - a.importe);
+  const totalProd = porProducto.length;
+  const top20Count = Math.max(1, Math.round(totalProd * 0.2));
+  const top20Ventas = porProducto.slice(0, top20Count).reduce((s,p)=>s+p.importe,0);
+  const concentracionPct = ventas > 0 ? top20Ventas/ventas*100 : 0;
+
+  // Productos con margen bajo pero venta relevante
+  const conMargen = porProducto.filter(p => p.importe > 0).map(p => ({ ...p, margenPct:(p.importe-p.cost)/p.importe*100 }));
+  const ventaMediana = [...conMargen].sort((a,b)=>b.importe-a.importe);
+  const umbralRelevancia = ventaMediana.length ? ventaMediana[Math.min(ventaMediana.length-1, Math.floor(ventaMediana.length*0.5))].importe : 0;
+  const bajoMargen = conMargen.filter(p => p.importe >= umbralRelevancia && p.margenPct < 35).sort((a,b)=>a.margenPct-b.margenPct).slice(0,3);
+
+  const top3 = porProducto.slice(0,3);
+
+  /* --- Resumen ejecutivo --- */
+  execEl.innerHTML = `Con los filtros actuales, el negocio registra <strong>${fmtMoney(ventas)}</strong> en ventas y <strong>${fmtMoney(ganancia)}</strong> de ganancia neta, equivalente a un margen del <strong>${margen.toFixed(1)}%</strong>. ` +
+    `La categoría <strong>${mejorCat.cat}</strong> es la más rentable (margen ${mejorCat.margen.toFixed(1)}%), mientras que <strong>${peorCat.cat}</strong> muestra el margen más ajustado (${peorCat.margen.toFixed(1)}%). ` +
+    (porMes.length >= 2 ? `Se observa ${tendenciaTxt}.` : '');
+
+  /* --- Fortalezas --- */
+  strEl.innerHTML = [
+    `<strong>${mejorCat.cat}</strong> es la categoría más rentable, con un margen de ${mejorCat.margen.toFixed(1)}% y ${mejorCat.share.toFixed(1)}% de participación en las ventas.`,
+    mejorMes ? `<strong>${monthLabel(mejorMes.month)}</strong> fue el mes de mejores ventas (${fmtMoney(mejorMes.importe)}, margen ${mejorMes.margen.toFixed(1)}%).` : '',
+    top3.length ? `Los productos con mayor tracción son ${top3.map(p=>`<strong>${p.prod}</strong>`).join(', ')}, que concentran ${fmtMoney(top3.reduce((s,p)=>s+p.importe,0))} en ventas.` : '',
+    margen >= 40 ? `El margen global de ${margen.toFixed(1)}% es saludable para un negocio de artesanía y decoración.` : ''
+  ].filter(Boolean).map(t => `<li class="flex gap-2"><span style="color:var(--sage)">•</span><span>${t}</span></li>`).join('');
+
+  /* --- Aspectos a mejorar --- */
+  weakEl.innerHTML = [
+    `<strong>${peorCat.cat}</strong> tiene el margen más bajo (${peorCat.margen.toFixed(1)}%) pese a representar ${peorCat.share.toFixed(1)}% de las ventas; revisar su estructura de costos.`,
+    peorMes ? `<strong>${monthLabel(peorMes.month)}</strong> fue el mes más débil (${fmtMoney(peorMes.importe)}); conviene entender la causa (estacionalidad, menor demanda, falta de promoción).` : '',
+    concentracionPct >= 60 ? `Existe riesgo de concentración: el 20% de los productos genera el ${concentracionPct.toFixed(0)}% de las ventas. Depender de pocos productos es vulnerable ante cambios de demanda.` : '',
+    bajoMargen.length ? `Productos con venta relevante pero margen bajo: ${bajoMargen.map(p=>`<strong>${p.prod}</strong> (${p.margenPct.toFixed(1)}%)`).join(', ')}.` : ''
+  ].filter(Boolean).map(t => `<li class="flex gap-2"><span style="color:var(--clay-dark)">•</span><span>${t}</span></li>`).join('');
+
+  /* --- Estrategias --- */
+  stratEl.innerHTML = [
+    `<strong>Corto plazo:</strong> ajustar precio o renegociar costos de insumos en ${peorCat.cat} y en los productos de margen bajo detectados, para elevar la rentabilidad sin perder volumen.`,
+    `<strong>Corto plazo:</strong> impulsar con promociones cruzadas los productos estrella (${top3.map(p=>p.prod).join(', ') || 'top ventas'}) en los canales de mayor tráfico.`,
+    peorMes ? `<strong>Mediano plazo:</strong> diseñar una campaña o combo especial para reforzar ${monthLabel(peorMes.month)} y meses de baja demanda similar.` : '',
+    `<strong>Mediano plazo:</strong> potenciar ${mejorCat.cat} (mayor margen) con nuevas variantes o ediciones, capitalizando su rentabilidad.`,
+    concentracionPct >= 60 ? `<strong>Largo plazo:</strong> diversificar el catálogo para reducir la dependencia de pocos productos y mitigar el riesgo de concentración.` : `<strong>Largo plazo:</strong> mantener el mix actual mientras se prueban 2-3 productos nuevos por trimestre para sostener el crecimiento.`,
+    `<strong>Transversal:</strong> dar seguimiento mensual a margen por categoría y producto con este panel, fijando metas de venta y margen por periodo.`
+  ].filter(Boolean).map(t => `<li class="flex gap-2"><span style="color:var(--amber)">•</span><span>${t}</span></li>`).join('');
+}
+
+function destroy(id){ if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function renderBarVC(rows, topN){
+  destroy('bar');
+  const grouped = groupByProduct(rows).sort((a,b) => b.importe - a.importe).slice(0, topN);
+  const ctx = document.getElementById('chartBarVC');
+  charts.bar = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: grouped.map(g => g.prod),
+      datasets:[
+        { label:'Ventas', data: grouped.map(g => g.importe), backgroundColor:'#B5502F', borderRadius:4 },
+        { label:'Costos', data: grouped.map(g => g.cost), backgroundColor:'#D8CCBB', borderRadius:4 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'top' }, tooltip:{ callbacks:{ label: (c) => `${c.dataset.label}: ${fmtMoney(c.raw)}` } } },
+      scales:{ x:{ ticks:{ autoSkip:false, maxRotation:60, minRotation:30, font:{size:10} } }, y:{ ticks:{ callback:(v)=>fmtNum(v) } } }
+    }
+  });
+}
+
+function renderDonut(rows){
+  destroy('donut');
+  const grouped = groupByCategory(rows);
+  const ctx = document.getElementById('chartDonut');
+  charts.donut = new Chart(ctx, {
+    type:'doughnut',
+    data:{
+      labels: grouped.map(g => g.cat),
+      datasets:[{ data: grouped.map(g => g.qty), backgroundColor: grouped.map(g => CAT_COLORS[g.cat] || '#999'), borderWidth:2, borderColor:'#fff' }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom' }, tooltip:{ callbacks:{ label:(c)=> `${c.label}: ${fmtNum(c.raw)} unidades` } } }
+    }
+  });
+}
+
+function renderLine(rows){
+  destroy('line');
+  const grouped = groupByMonth(rows);
+  const ctx = document.getElementById('chartLine');
+  charts.line = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: grouped.map(g => monthLabel(g.month)),
+      datasets:[
+        { label:'Ventas', data: grouped.map(g => g.importe), borderColor:'#B5502F', backgroundColor:'#B5502F22', fill:true, tension:.3 },
+        { label:'Costos', data: grouped.map(g => g.cost), borderColor:'#7A6F63', backgroundColor:'#7A6F6322', fill:true, tension:.3 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'top' }, tooltip:{ callbacks:{ label:(c)=> `${c.dataset.label}: ${fmtMoney(c.raw)}` } } },
+      scales:{ y:{ ticks:{ callback:(v)=>fmtNum(v) } } }
+    }
+  });
+}
+
+function renderPareto(rows, topN){
+  destroy('pareto');
+  const grouped = groupByProduct(rows).sort((a,b) => b.importe - a.importe).slice(0, topN);
+  const total = groupByProduct(rows).reduce((s,g) => s + g.importe, 0) || 1;
+  let acc = 0;
+  const cum = grouped.map(g => { acc += g.importe; return acc/total*100; });
+  const ctx = document.getElementById('chartPareto');
+  charts.pareto = new Chart(ctx, {
+    data:{
+      labels: grouped.map(g => g.prod),
+      datasets:[
+        { type:'bar', label:'Venta', data: grouped.map(g => g.importe), backgroundColor:'#C99A3E', order:2, yAxisID:'y' },
+        { type:'line', label:'% Acumulado', data: cum, borderColor:'#2B2420', backgroundColor:'#2B2420', tension:.25, yAxisID:'y1', order:1 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'top' }, tooltip:{ callbacks:{ label:(c)=> c.dataset.label==='% Acumulado' ? `${c.raw.toFixed(1)}%` : fmtMoney(c.raw) } } },
+      scales:{
+        x:{ ticks:{ autoSkip:false, maxRotation:60, minRotation:30, font:{size:10} } },
+        y:{ position:'left', ticks:{ callback:(v)=>fmtNum(v) } },
+        y1:{ position:'right', min:0, max:100, grid:{ drawOnChartArea:false }, ticks:{ callback:(v)=>v+'%' } }
+      }
+    }
+  });
+}
+
+/* ============ FÓRMULAS: PARETO Y RAZONES FINANCIERAS ============ */
+function renderFormulas(rows){
+  const paretoEl = document.getElementById('paretoInterpretacion');
+  const cardsEl = document.getElementById('ratiosCards');
+  if (rows.length === 0){
+    paretoEl.textContent = 'No hay datos suficientes con los filtros actuales.';
+    cardsEl.innerHTML = '';
+    return;
+  }
+
+  const ventas = rows.reduce((s,r) => s + r.importe, 0);
+  const costos = rows.reduce((s,r) => s + r.cost, 0);
+  const ganancia = ventas - costos;
+  const cantidadTotal = rows.reduce((s,r) => s + r.qty, 0);
+
+  const porProducto = groupByProduct(rows).sort((a,b) => b.importe - a.importe);
+  const n = porProducto.length;
+  const top20Count = Math.max(1, Math.round(n * 0.2));
+  const top20Ventas = porProducto.slice(0, top20Count).reduce((s,p)=>s+p.importe,0);
+  const concentracionPct = ventas > 0 ? top20Ventas/ventas*100 : 0;
+
+  paretoEl.innerHTML = `En el periodo filtrado, el <strong>${(top20Count/n*100).toFixed(0)}%</strong> de los productos (${top20Count} de ${n}) genera el <strong>${concentracionPct.toFixed(1)}%</strong> de las ventas totales. ` +
+    (concentracionPct >= 65
+      ? 'Esto confirma un patrón de Pareto marcado: conviene proteger y priorizar estos productos clave, y evaluar si vale la pena mantener el resto del catálogo de baja rotación.'
+      : 'La concentración es moderada, lo que indica un catálogo relativamente equilibrado entre varios productos.');
+
+  const margenBruto = ventas > 0 ? ganancia/ventas*100 : 0;
+  const markup = costos > 0 ? ganancia/costos*100 : 0;
+  const ratioCV = ventas > 0 ? costos/ventas : 0;
+  const ticketProm = cantidadTotal > 0 ? ventas/cantidadTotal : 0;
+  const rotacionProm = n > 0 ? cantidadTotal/n : 0;
+  const ventaPromProducto = n > 0 ? ventas/n : 0;
+
+  function estado(valor, buenoMin, aceptableMin, invertido){
+    // invertido=true significa "menor es mejor" (ej. ratio costo/venta)
+    if (!invertido){
+      if (valor >= buenoMin) return { label:'Saludable', cls:'badge-ok' };
+      if (valor >= aceptableMin) return { label:'Aceptable', cls:'badge-warn' };
+      return { label:'A revisar', cls:'badge-alert' };
+    } else {
+      if (valor <= buenoMin) return { label:'Saludable', cls:'badge-ok' };
+      if (valor <= aceptableMin) return { label:'Aceptable', cls:'badge-warn' };
+      return { label:'A revisar', cls:'badge-alert' };
+    }
+  }
+
+  const items = [
+    {
+      icono:'💰', nombre:'Margen bruto', valor:`${margenBruto.toFixed(1)}%`,
+      formula:'(Ventas − Costos) ÷ Ventas × 100',
+      explicacion:'De cada 100 CUP vendidos, cuánto queda como ganancia real después de cubrir el costo del producto.',
+      estado: estado(margenBruto, 45, 25, false)
+    },
+    {
+      icono:'📈', nombre:'Markup sobre costo', valor:`${markup.toFixed(1)}%`,
+      formula:'(Ventas − Costos) ÷ Costos × 100',
+      explicacion:'Cuánto se gana por encima de lo que cuesta producir o comprar cada artículo. Un markup alto da margen para bajar precios si hace falta competir.',
+      estado: estado(markup, 80, 40, false)
+    },
+    {
+      icono:'⚖️', nombre:'Ratio Costo / Venta', valor: ratioCV.toFixed(2),
+      formula:'Costos ÷ Ventas',
+      explicacion:'Qué proporción de cada venta se destina a cubrir costos. Cuanto más bajo, más queda de ganancia por cada CUP vendido.',
+      estado: estado(ratioCV, 0.55, 0.75, true)
+    },
+    {
+      icono:'🧾', nombre:'Ticket promedio', valor: fmtMoney(ticketProm),
+      formula:'Ventas ÷ Unidades vendidas',
+      explicacion:'Valor promedio que representa cada unidad vendida, sin importar el producto. Útil para comparar contra meses o categorías anteriores.',
+      estado: null
+    },
+    {
+      icono:'🔄', nombre:'Rotación promedio', valor:`${rotacionProm.toFixed(1)} u/producto`,
+      formula:'Unidades vendidas ÷ N.º de productos',
+      explicacion:'Cuántas unidades se venden en promedio por cada producto del catálogo. Un número bajo puede indicar productos de muy baja salida.',
+      estado: null
+    },
+    {
+      icono:'📦', nombre:'Venta promedio por producto', valor: fmtMoney(ventaPromProducto),
+      formula:'Ventas ÷ N.º de productos',
+      explicacion:'Cuánto genera, en promedio, cada producto del catálogo. Sirve para detectar si el negocio depende de pocos productos fuertes.',
+      estado: null
+    },
+  ];
+
+  cardsEl.innerHTML = items.map(it => `
+    <div class="rounded-lg p-3" style="background:#FAF7F2; border:1px solid var(--line);">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">${it.icono}</span>
+          <span class="text-sm font-semibold">${it.nombre}</span>
+        </div>
+        ${it.estado ? `<span class="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${it.estado.cls}">${it.estado.label}</span>` : ''}
+      </div>
+      <p class="kpi-value text-xl mt-1" style="color:var(--clay-dark)">${it.valor}</p>
+      <p class="text-[11px] text-[var(--muted)] font-mono mt-0.5">${it.formula}</p>
+      <p class="text-xs text-[var(--ink)]/80 mt-1.5 leading-snug">${it.explicacion}</p>
+    </div>
+  `).join('');
+}
+
+function renderRatiosChart(rows){
+  destroy('ratios');
+  const porCategoria = groupByCategory(rows).map(g => {
+    const ganancia = g.importe - g.cost;
+    return {
+      cat: g.cat,
+      margen: g.importe > 0 ? ganancia/g.importe*100 : 0,
+      markup: g.cost > 0 ? ganancia/g.cost*100 : 0,
+      eficiencia: g.importe > 0 ? (1 - g.cost/g.importe) * 100 : 0
+    };
+  });
+  const ctx = document.getElementById('chartRatios');
+  charts.ratios = new Chart(ctx, {
+    type:'radar',
+    data:{
+      labels:['Margen %', 'Markup %', 'Eficiencia de costo %'],
+      datasets: porCategoria.map(c => ({
+        label: c.cat,
+        data: [c.margen, c.markup, c.eficiencia],
+        borderColor: CAT_COLORS[c.cat] || '#999',
+        backgroundColor: (CAT_COLORS[c.cat] || '#999') + '33',
+        pointBackgroundColor: CAT_COLORS[c.cat] || '#999'
+      }))
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom' }, tooltip:{ callbacks:{ label:(c)=> `${c.dataset.label}: ${c.raw.toFixed(1)}%` } } },
+      scales:{ r:{ beginAtZero:true, ticks:{ callback:(v)=>v+'%' } } }
+    }
+  });
+}
+
+function renderMargin(rows){
+  destroy('margin');
+  const grouped = groupByProduct(rows)
+    .filter(g => g.importe > 0)
+    .map(g => ({ ...g, marginPct: (g.importe - g.cost) / g.importe * 100 }));
+  const ordenadoPorVenta = [...grouped].sort((a,b)=>b.importe-a.importe);
+  const relevantThreshold = ordenadoPorVenta.length ? ordenadoPorVenta[Math.min(ordenadoPorVenta.length-1, Math.floor(ordenadoPorVenta.length*0.5))].importe : 0;
+  const top = grouped.filter(g => g.importe >= relevantThreshold).sort((a,b) => b.marginPct - a.marginPct).slice(0, 10);
+  const ctx = document.getElementById('chartMargin');
+  charts.margin = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: top.map(g => g.prod),
+      datasets:[{ label:'Margen %', data: top.map(g => g.marginPct), backgroundColor: top.map(g => CAT_COLORS[g.cat] || '#999'), borderRadius:4 }]
+    },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=> `Margen: ${c.raw.toFixed(1)}%` } } },
+      scales:{ x:{ ticks:{ callback:(v)=>v+'%' } } }
+    }
+  });
+}
+
+function renderTable(rows){
+  const grouped = groupByProduct(rows).map(g => ({ ...g, margin: g.importe - g.cost, marginPct: g.importe > 0 ? (g.importe-g.cost)/g.importe*100 : 0 }));
+  const { key, dir } = sortState;
+  grouped.sort((a,b) => dir === 'asc' ? (a[key] > b[key] ? 1 : -1) : (a[key] < b[key] ? 1 : -1));
+  document.getElementById('tableCount').textContent = `${grouped.length} productos`;
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = grouped.map(g => `
+    <tr class="border-b border-[var(--line)] hover:bg-[#FAF7F2]">
+      <td class="py-2 px-3"><span class="text-xs px-2 py-0.5 rounded-full ${CAT_BADGE[g.cat] || ''}">${g.cat}</span></td>
+      <td class="py-2 px-3">${g.prod}</td>
+      <td class="py-2 px-3 text-right">${fmtNum(g.qty)}</td>
+      <td class="py-2 px-3 text-right">${fmtMoney(g.cost)}</td>
+      <td class="py-2 px-3 text-right">${fmtMoney(g.importe)}</td>
+      <td class="py-2 px-3 text-right" style="color:${g.margin>=0?'var(--sage)':'var(--clay-dark)'}">${fmtMoney(g.margin)}</td>
+      <td class="py-2 px-3 text-right">${g.marginPct.toFixed(1)}%</td>
+    </tr>
+  `).join('');
+}
+
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    sortState.dir = (sortState.key === key && sortState.dir === 'desc') ? 'asc' : 'desc';
+    sortState.key = key;
+    renderTable(getFiltered());
+  });
+});
+
+/* ============ CARGA INICIAL (datos embebidos de Fichero-venta-2026.xlsx) ============ */
+const EMBEDDED_DATA = [["ENERO", "Barro", "Maceta honda 12\" nueva", 2, 361, 700, 1400, 538, 678, 140, 722], ["ENERO", "Barro", "Maceta honda 6\"", 2, 77, 200, 400, 206, 246, 40, 154], ["ENERO", "Barro", "Maceta jardinera 6\"", 4, 77, 200, 800, 412, 492, 80, 308], ["ENERO", "Barro", "Maceta de 4\"", 5, 57, 100, 500, 165, 215, 50, 285], ["ENERO", "Barro", "Plato", 1, 107, 200, 200, 73, 93, 20, 107], ["ENERO", "Barro", "Hongos sencillosThiago", 2, 30, 100, 200, 120, 140, 20, 60], ["ENERO", "Barro", "Gnomos de molde Thiago", 1, 100, 150, 150, 35, 50, 15, 100], ["ENERO", "Barro", "Gnomos con hongo Thiago", 2, 100, 250, 500, 250, 300, 50, 200], ["ENERO", "Barro", "Rana pequeña con maceta", 1, 100, 300, 300, 170, 200, 30, 100], ["ENERO", "Barro", "Sonajero nuevo", 2, 700, 1600, 3200, 1480, 1800, 320, 1400], ["ENERO", "Barro", "Plato elegua ", 1, 41, 300, 300, 229, 259, 30, 41], ["ENERO", "Barro", "Plato elegua chico", 6, 21, 200, 1200, 954, 1074, 120, 126], ["ENERO", "Barro", "Maceta plástica grande", 7, 90, 350, 2450, 1575, 1820, 245, 630], ["ENERO", "Barro", "Maceta plástica mediana", 5, 80, 250, 1250, 725, 850, 125, 400], ["ENERO", "Barro", "Maceta plástica chica", 10, 12, 50, 500, 330, 380, 50, 120], ["ENERO", "Barro", "Maceta plastica lisa", 7, 40, 150, 1050, 665, 770, 105, 280], ["ENERO", "Plantas Ornamentales", "PO Maceta honda ø 12\"  nueva", 3, 500, 900, 2700, 930, 1200, 270, 1500], ["ENERO", "Plantas Ornamentales", "PO Maceta honda ø10\"", 1, 300, 700, 700, 330, 400, 70, 300], ["ENERO", "Plantas Ornamentales", "PO Maceta ø 4\"", 1, 70, 200, 200, 110, 130, 20, 70], ["ENERO", "Plantas Ornamentales", "PO Maceta plastica grande", 1, 250, 450, 450, 155, 200, 45, 250], ["ENERO", "Plantas Ornamentales", "PO pinito maceta plast chica", 2, 70, 170, 340, 166, 200, 34, 140], ["ENERO", "Plantas Ornamentales", "PO maceta plastica ", 1, 250, 500, 500, 200, 250, 50, 250], ["ENERO", "Plantas Ornamentales", "PO Javier", 2, 70, 150, 300, 130, 160, 30, 140], ["ENERO", "Manualidades", "Libreta grande", 5, 294, 500, 2500, 780, 1030, 250, 1470], ["ENERO", "Manualidades", "Portacelular", 4, 210, 400, 1600, 600, 760, 160, 840], ["ENERO", "Manualidades", "Jaba de regalos grande", 5, 80, 180, 900, 410, 500, 90, 400], ["ENERO", "Manualidades", "Jaba de regalos chiquita", 1, 40, 100, 100, 50, 60, 10, 40], ["ENERO", "Manualidades", "Tabla de colgar", 3, 200, 350, 1050, 345, 450, 105, 600], ["ENERO", "Manualidades", "Tabla de cortar", 2, 233, 500, 1000, 434, 534, 100, 466], ["ENERO", "Manualidades", "Plastilina", 1, 200, 450, 450, 205, 250, 45, 200], ["ENERO", "Manualidades", "Tubo de tela de recortes", 2, 200, 400, 800, 320, 400, 80, 400], ["ENERO", "Manualidades", "Palitos de tender", 4, 130, 200, 800, 200, 280, 80, 520], ["ENERO", "Manualidades", "Juego de agarraderas", 4, 120, 200, 800, 240, 320, 80, 480], ["ENERO", "Manualidades", "Libro de colorear", 1, 75, 200, 200, 105, 125, 20, 75], ["ENERO", "Manualidades", "Lapiceros", 8, 33, 70, 560, 240, 240, 296, 56], ["ENERO", "Manualidades", "Palitos de tazas", 3, 150, 300, 900, 360, 450, 90, 450], ["ENERO", "Manualidades", "Cubo grande nuevo", 1, 210, 420, 420, 168, 210, 42, 210], ["ENERO", "Manualidades", "Cesto baño", 3, 250, 500, 1500, 600, 750, 150, 750], ["ENERO", "Manualidades", "Pozuelos grandes", 8, 120, 200, 1600, 480, 640, 160, 960], ["ENERO", "Manualidades", "Tazas de café", 10, 45, 100, 1000, 450, 550, 100, 450], ["ENERO", "Manualidades", "Pulso mediano", 2, 100, 200, 400, 160, 200, 40, 200], ["ENERO", "Manualidades", "Amigurumi ", 2, 600, 1200, 2400, 960, 1200, 240, 1200], ["ENERO", "Manualidades", "Amigurumi chico", 1, 350, 500, 500, 100, 150, 50, 350], ["ENERO", "Manualidades", "Circulo de alfileres", 1, 250, 350, 350, 65, 100, 35, 250], ["ENERO", "Manualidades", "Agenda", 2, 100, 200, 400, 160, 200, 40, 200], ["ENERO", "Manualidades", "Vasos plásticos ", 4, 30, 100, 400, 240, 280, 40, 120], ["ENERO", "Manualidades", "Platos plasticos", 9, 50, 150, 1350, 765, 900, 135, 450], ["ENERO", "Manualidades", "Platoncito", 1, 120, 200, 200, 60, 80, 20, 120], ["ENERO", "Manualidades", "Aretes", 1, 100, 180, 180, 62, 80, 18, 100], ["ENERO", "Manualidades", "Adorno de refrigerador", 5, 80, 160, 800, 320, 400, 80, 400], ["ENERO", "Manualidades", "Adorno de refrigerador", 4, 150, 300, 1200, 480, 600, 120, 600], ["ENERO", "Manualidades", "Faomi", 4, 80, 150, 600, 220, 280, 60, 320], ["ENERO", "Manualidades", "Pozuelos con tapa grandes", 1, 300, 700, 700, 330, 400, 70, 300], ["ENERO", "Manualidades", "Batas de palitos", 2, 150, 350, 700, 330, 400, 70, 300], ["ENERO", "Manualidades", "Plato plástico", 1, 40, 100, 100, 50, 60, 10, 40], ["ENERO", "Manualidades", "Delantal", 3, 250, 500, 1500, 600, 750, 150, 750], ["ENERO", "Manualidades", "Juego de paño de cocina", 2, 150, 250, 500, 150, 200, 50, 300], ["ENERO", "Manualidades", "Cartera tejida de celular", 1, 400, 800, 800, 320, 400, 80, 400], ["ENERO", "Manualidades", "Muñeca de trapo", 1, 100, 200, 200, 80, 100, 20, 100], ["ENERO", "Manualidades", "Machete", 1, 100, 300, 300, 170, 200, 30, 100], ["ENERO", "Manualidades", "Collar ", 1, 150, 350, 350, 165, 200, 35, 150], ["ENERO", "Manualidades", "Colgante de celular ", 1, 150, 300, 300, 120, 150, 30, 150], ["ENERO", "Manualidades", "Colgante de celular ", 1, 100, 200, 200, 80, 100, 20, 100], ["ENERO", "Manualidades", "Camión volteo chico", 1, 100, 250, 250, 125, 150, 25, 100], ["ENERO", "Manualidades", "Volqueta", 1, 100, 250, 250, 125, 150, 25, 100], ["ENERO", "Manualidades", "Espada", 1, 110, 250, 250, 115, 140, 25, 110], ["ENERO", "Manualidades", "Plumones", 1, 70, 150, 150, 65, 80, 15, 70], ["ENERO", "Manualidades", "Alfombra", 1, 200, 400, 400, 160, 200, 40, 200], ["ENERO", "Manualidades", "cepillo de lavar", 4, 50, 100, 400, 160, 200, 40, 200], ["ENERO", "Manualidades", "Jaba Rubí", 2, 250, 350, 700, 130, 200, 70, 500], ["ENERO", "Manualidades", "Jaba Rubí plateada", 2, 300, 500, 1000, 300, 400, 100, 600], ["ENERO", "Manualidades", "Jaba Vilma", 3, 200, 350, 1050, 345, 450, 105, 600], ["ENERO", "Manualidades", "Anzuelo", 1, 25, 50, 50, 20, 25, 5, 25], ["ENERO", "Manualidades", "Portallaves", 1, 420, 800, 800, 300, 380, 80, 420], ["ENERO", "Manualidades", "Colador", 1, 150, 220, 220, 48, 48, 70, 22], ["ENERO", "Manualidades", "Bucaro Grande", 1, 800, 2500, 2500, 1450, 1450, 1700, 250], ["ENERO", "Manualidades", "Arlequin de navidad ", 1, 200, 350, 350, 115, 115, 150, 35], ["FEBRERO", "Barro", "Maceta honda 6\"", 2, 77, 200, 400, 206, 246, 40, 154], ["FEBRERO", "Barro", "Maceta jardinera 6\"", 3, 77, 200, 600, 309, 369, 60, 231], ["FEBRERO", "Barro", "Freideras chiquitas", 4, 150, 300, 1200, 480, 600, 120, 600], ["FEBRERO", "Barro", "Freideras grandes", 1, 107, 450, 450, 298, 343, 45, 107], ["FEBRERO", "Barro", "Maceta de 4\"", 2, 57, 100, 200, 66, 86, 20, 114], ["FEBRERO", "Barro", "Hongos sencillosThiago", 7, 30, 100, 700, 420, 490, 70, 210], ["FEBRERO", "Barro", "Bebedero conejos nuevo", 7, 107, 300, 2100, 1141, 1351, 210, 749], ["FEBRERO", "Barro", "Gnomos de molde Thiago", 6, 100, 150, 900, 210, 300, 90, 600], ["FEBRERO", "Barro", "Bucaro", 2, 41, 250, 500, 0, 0, 50, 82], ["FEBRERO", "Barro", "Tinajitas secreto", 1, 21, 200, 200, 159, 179, 20, 21], ["FEBRERO", "Barro", "Plato elegua chico", 3, 21, 200, 600, 477, 537, 60, 63], ["FEBRERO", "Barro", "Maceta plástica grande", 5, 90, 350, 1750, 1125, 1300, 175, 450], ["FEBRERO", "Barro", "Maceta plástica mediana", 3, 80, 250, 750, 435, 510, 75, 240], ["FEBRERO", "Barro", "Maceta plástica chica", 9, 12, 50, 450, 297, 342, 45, 108], ["FEBRERO", "Barro", "Maceta plastica lisa", 11, 40, 150, 1650, 1045, 1210, 165, 440], ["FEBRERO", "Plantas Ornamentales", "PO Maceta honda ø 12\"  nueva", 1, 500, 900, 900, 310, 400, 90, 500], ["FEBRERO", "Plantas Ornamentales", "PO Maceta honda ø10\"", 1, 300, 700, 700, 330, 400, 70, 300], ["FEBRERO", "Plantas Ornamentales", "PO maceta plastica ", 1, 200, 400, 400, 160, 200, 40, 200], ["FEBRERO", "Plantas Ornamentales", "PO maceta plastica ", 1, 250, 500, 500, 200, 250, 50, 250], ["FEBRERO", "Plantas Ornamentales", "PO Javier", 2, 70, 150, 300, 130, 160, 30, 140], ["FEBRERO", "Plantas Ornamentales", "Romero MHǾ8", 1, 100, 400, 400, 260, 300, 40, 100], ["FEBRERO", "Manualidades", "Portacelular", 4, 210, 450, 1800, 780, 960, 180, 840], ["FEBRERO", "Manualidades", "Jaba de regalos grande", 5, 80, 180, 900, 410, 500, 90, 400], ["FEBRERO", "Manualidades", "Jaba de regalos chiquita", 2, 40, 100, 200, 100, 120, 20, 80], ["FEBRERO", "Manualidades", "Tubo de tela de recortes", 1, 200, 400, 400, 160, 200, 40, 200], ["FEBRERO", "Manualidades", "Palitos de tender", 10, 130, 200, 2000, 500, 700, 200, 1300], ["FEBRERO", "Manualidades", "Juego de agarraderas", 4, 120, 200, 800, 240, 320, 80, 480], ["FEBRERO", "Manualidades", "Lapiceros", 2, 33, 70, 140, 60, 60, 74, 14], ["FEBRERO", "Manualidades", "Palitos de tazas", 1, 150, 300, 300, 120, 150, 30, 150], ["FEBRERO", "Manualidades", "Cubo grande nuevo", 2, 210, 420, 840, 336, 420, 84, 420], ["FEBRERO", "Manualidades", "Cesto baño", 3, 250, 500, 1500, 600, 750, 150, 750], ["FEBRERO", "Manualidades", "Jaba de mandados", 4, 150, 300, 1200, 480, 600, 120, 600], ["FEBRERO", "Manualidades", "Tazas de café", 10, 45, 100, 1000, 450, 550, 100, 450], ["FEBRERO", "Manualidades", "Libreta chica", 2, 200, 350, 700, 230, 300, 70, 400], ["FEBRERO", "Manualidades", "Pulso chico", 1, 100, 170, 170, 53, 70, 17, 100], ["FEBRERO", "Manualidades", "Pulso mediano", 2, 100, 200, 400, 160, 200, 40, 200], ["FEBRERO", "Manualidades", "Cocinero", 1, 100, 250, 250, 125, 150, 25, 100], ["FEBRERO", "Manualidades", "Lechuza adorno", 1, 250, 400, 400, 110, 150, 40, 250], ["FEBRERO", "Manualidades", "Llavero ", 1, 200, 350, 350, 115, 150, 35, 200], ["FEBRERO", "Manualidades", "Vasos plásticos ", 5, 30, 80, 400, 210, 250, 40, 150], ["FEBRERO", "Manualidades", "Platos plasticos", 6, 50, 150, 900, 510, 600, 90, 300], ["FEBRERO", "Manualidades", "Platoncito", 2, 120, 200, 400, 120, 160, 40, 240], ["FEBRERO", "Manualidades", "Bata de batidora", 1, 300, 450, 450, 105, 150, 45, 300], ["FEBRERO", "Manualidades", "Bolsa regalo de tela", 5, 80, 130, 650, 185, 250, 65, 400], ["FEBRERO", "Manualidades", "Bolsita regalo de tela", 2, 40, 80, 160, 64, 80, 16, 80], ["FEBRERO", "Manualidades", "Lazos  magicos", 31, 10, 30, 930, 527, 620, 93, 310], ["FEBRERO", "Manualidades", "Adorno de refrigerador", 3, 80, 160, 480, 192, 240, 48, 240], ["FEBRERO", "Manualidades", "Faomi", 18, 80, 150, 2700, 990, 1260, 270, 1440], ["FEBRERO", "Manualidades", "Pozuelos chicos", 2, 35, 100, 200, 110, 130, 20, 70], ["FEBRERO", "Manualidades", "Cajas de regalos", 5, 50, 150, 750, 425, 500, 75, 250], ["FEBRERO", "Manualidades", "Pulso grande", 2, 150, 250, 500, 150, 200, 50, 300], ["FEBRERO", "Manualidades", "Pulso", 3, 170, 280, 840, 246, 330, 84, 510], ["FEBRERO", "Manualidades", "Pulso tejido", 5, 200, 350, 1750, 575, 750, 175, 1000], ["FEBRERO", "Manualidades", "Pulso ", 1, 200, 400, 400, 160, 200, 40, 200], ["FEBRERO", "Manualidades", "Pulsos pareja ", 1, 350, 700, 700, 280, 350, 70, 350], ["FEBRERO", "Manualidades", "Cartelito te amo", 7, 200, 300, 2100, 490, 700, 210, 1400], ["FEBRERO", "Manualidades", "Ada pequeña", 1, 250, 500, 500, 200, 250, 50, 250], ["FEBRERO", "Manualidades", "Corazon chiquito tela", 1, 200, 400, 400, 160, 200, 40, 200], ["FEBRERO", "Manualidades", "Juego de paño de cocina", 2, 200, 450, 900, 410, 500, 90, 400], ["FEBRERO", "Manualidades", "Cojin", 1, 200, 350, 350, 115, 150, 35, 200], ["FEBRERO", "Manualidades", "Toalla de cocina", 1, 350, 450, 450, 55, 100, 45, 350], ["FEBRERO", "Manualidades", "Jarra con tapa", 1, 70, 150, 150, 65, 80, 15, 70], ["FEBRERO", "Manualidades", "Collar ", 1, 150, 350, 350, 165, 200, 35, 150], ["FEBRERO", "Manualidades", "Colgante de celular ", 1, 80, 150, 150, 55, 70, 15, 80], ["FEBRERO", "Manualidades", "Colgante de celular ", 2, 150, 300, 600, 240, 300, 60, 300], ["FEBRERO", "Manualidades", "Abanico", 1, 170, 250, 250, 55, 80, 25, 170], ["FEBRERO", "Manualidades", "Brujita chiquita", 1, 250, 380, 380, 92, 130, 38, 250], ["FEBRERO", "Manualidades", "Pelotas trapo", 1, 70, 150, 150, 65, 80, 15, 70], ["FEBRERO", "Manualidades", "Pelotas ", 2, 200, 300, 600, 140, 200, 60, 400], ["FEBRERO", "Manualidades", "Ula-ula", 1, 150, 400, 400, 210, 250, 40, 150], ["FEBRERO", "Manualidades", "Camión volteo chico", 1, 100, 250, 250, 125, 150, 25, 100], ["FEBRERO", "Manualidades", "Bate y pelota", 1, 150, 300, 300, 120, 150, 30, 150], ["FEBRERO", "Manualidades", "Suiza", 1, 350, 700, 700, 280, 350, 70, 350], ["FEBRERO", "Manualidades", "Espada", 1, 110, 250, 250, 115, 140, 25, 110], ["FEBRERO", "Manualidades", "Alfombra", 10, 200, 400, 4000, 1600, 2000, 400, 2000], ["FEBRERO", "Manualidades", "Alfombra tejida", 3, 300, 550, 1650, 585, 750, 165, 900], ["FEBRERO", "Manualidades", "Vasos plásticos ", 5, 30, 100, 500, 300, 350, 50, 150], ["FEBRERO", "Manualidades", "cepillo de lavar", 1, 50, 100, 100, 40, 50, 10, 50], ["FEBRERO", "Manualidades", "Jaba Rubí", 4, 250, 350, 1400, 260, 400, 140, 1000], ["FEBRERO", "Manualidades", "Titere", 1, 230, 450, 450, 175, 220, 45, 230], ["FEBRERO", "Manualidades", "Bucaro chico", 1, 500, 1500, 1500, 850, 850, 1000, 150], ["MARZO", "Barro", "Maceta jardinera 8\"", 2, 107, 300, 600, 326, 386, 60, 214], ["MARZO", "Barro", "Maceta jardinera 6\"", 4, 77, 200, 800, 412, 492, 80, 308], ["MARZO", "Barro", "Freideras chiquitas", 4, 150, 300, 1200, 480, 600, 120, 600], ["MARZO", "Barro", "Freideras grandes", 5, 107, 450, 2250, 1490, 1715, 225, 535], ["MARZO", "Barro", "Maceta de 4\"", 6, 57, 100, 600, 198, 258, 60, 342], ["MARZO", "Barro", "Plato", 4, 107, 200, 800, 292, 372, 80, 428], ["MARZO", "Barro", "Hongos sencillosThiago", 3, 30, 100, 300, 180, 210, 30, 90], ["MARZO", "Barro", "Bebedero conejos nuevo", 2, 107, 300, 600, 326, 386, 60, 214], ["MARZO", "Barro", "Gnomos grandes", 1, 500, 2000, 2000, 1300, 1500, 200, 500], ["MARZO", "Barro", "Gnomos de molde Thiago", 3, 100, 150, 450, 105, 150, 45, 300], ["MARZO", "Barro", "Gnomos con hongo Thiago", 1, 100, 250, 250, 125, 150, 25, 100], ["MARZO", "Barro", "Rana grande acostada", 1, 350, 1000, 1000, 550, 650, 100, 350], ["MARZO", "Barro", "Maceta de 4\" pintada", 2, 67, 140, 280, 118, 146, 28, 134], ["MARZO", "Barro", "Maceta de 2\" pintada", 3, 30, 80, 240, 126, 150, 24, 90], ["MARZO", "Barro", "Bucaro", 3, 41, 250, 750, 552, 0, 75, 123], ["MARZO", "Barro", "Cadenas", 3, 150, 300, 900, 360, 450, 90, 450], ["MARZO", "Barro", "Maceta plástica mediana", 2, 80, 250, 500, 290, 340, 50, 160], ["MARZO", "Barro", "Maceta plástica chica", 9, 12, 50, 450, 297, 342, 45, 108], ["MARZO", "Barro", "Maceta plastica lisa", 10, 40, 150, 1500, 950, 1100, 150, 400], ["MARZO", "Plantas Ornamentales", "PO Maceta honda ø 12\"  nueva", 2, 500, 900, 1800, 620, 800, 180, 1000], ["MARZO", "Plantas Ornamentales", "PO Maceta honda ø 12\"  nueva 2", 2, 500, 1000, 2000, 800, 1000, 200, 1000], ["MARZO", "Plantas Ornamentales", "PO Maceta honda ø10\"", 4, 300, 700, 2800, 1320, 1600, 280, 1200], ["MARZO", "Plantas Ornamentales", "PO Maceta ø 4\"", 3, 70, 200, 600, 330, 390, 60, 210], ["MARZO", "Plantas Ornamentales", "PO maceta plast chica", 7, 70, 170, 1190, 581, 700, 119, 490], ["MARZO", "Plantas Ornamentales", "PO maceta plast mediana", 2, 150, 300, 600, 240, 300, 60, 300], ["MARZO", "Plantas Ornamentales", "PO maceta plastica ", 2, 200, 400, 800, 320, 400, 80, 400], ["MARZO", "Plantas Ornamentales", "PO maceta plastica ", 1, 250, 500, 500, 200, 250, 50, 250], ["MARZO", "Plantas Ornamentales", "Romero MHǾ8", 2, 100, 500, 1000, 700, 800, 100, 200], ["MARZO", "Plantas Ornamentales", "PO en Bolsa grande", 1, 100, 500, 500, 350, 400, 50, 100], ["MARZO", "Manualidades", "Portacelular", 8, 210, 450, 3600, 1560, 1920, 360, 1680], ["MARZO", "Manualidades", "Jaba de regalos grande", 2, 80, 180, 360, 164, 200, 36, 160], ["MARZO", "Manualidades", "Tabla de cortar", 2, 233, 500, 1000, 434, 534, 100, 466], ["MARZO", "Manualidades", "Tubo de tela de recortes", 1, 200, 400, 400, 160, 200, 40, 200], ["MARZO", "Manualidades", "Panera pescado", 1, 200, 300, 300, 70, 100, 30, 200], ["MARZO", "Manualidades", "Ramo de flores chicos", 1, 1000, 2000, 2000, 800, 1000, 200, 1000], ["MARZO", "Manualidades", "Juego almohaditas bebe", 1, 350, 700, 700, 280, 350, 70, 350], ["MARZO", "Manualidades", "Almohadas", 6, 600, 1100, 6600, 2340, 3000, 660, 3600], ["MARZO", "Manualidades", "Lapiceros", 3, 33, 70, 210, 90, 90, 111, 21], ["MARZO", "Manualidades", "Palitos de tazas", 1, 150, 300, 300, 120, 150, 30, 150], ["MARZO", "Manualidades", "Cubo grande nuevo", 3, 210, 420, 1260, 504, 630, 126, 630], ["MARZO", "Manualidades", "Jaba de mandados ", 1, 100, 200, 200, 80, 100, 20, 100], ["MARZO", "Manualidades", "Jaba de tela", 1, 150, 250, 250, 75, 100, 25, 150], ["MARZO", "Manualidades", "Jaba de mandados", 3, 150, 300, 900, 360, 450, 90, 450], ["MARZO", "Manualidades", "Jaba de nylon grande", 1, 100, 250, 250, 125, 150, 25, 100], ["MARZO", "Manualidades", "Jabas nylon ", 1, 100, 200, 200, 80, 100, 20, 100], ["MARZO", "Manualidades", "Amigurumi ", 1, 600, 1000, 1000, 300, 400, 100, 600], ["MARZO", "Manualidades", "Amigurumi ", 1, 600, 1200, 1200, 480, 600, 120, 600], ["MARZO", "Manualidades", "Amigurumi chico", 1, 350, 600, 600, 190, 250, 60, 350], ["MARZO", "Manualidades", "Amigurumi grande", 1, 700, 1500, 1500, 650, 800, 150, 700], ["MARZO", "Manualidades", "Sonajero", 2, 750, 1600, 3200, 1380, 1700, 320, 1500], ["MARZO", "Manualidades", "Confetti", 1, 80, 100, 100, 10, 20, 10, 80], ["MARZO", "Manualidades", "Cenicero caro", 2, 150, 350, 700, 330, 400, 70, 300], ["MARZO", "Manualidades", "Camino de mesa tejido", 1, 500, 1000, 1000, 400, 500, 100, 500], ["MARZO", "Manualidades", "Platos plasticos", 6, 50, 150, 900, 510, 600, 90, 300], ["MARZO", "Manualidades", "Aretes", 2, 100, 180, 360, 124, 160, 36, 200], ["MARZO", "Manualidades", "Corchita de limpiar la meceta", 1, 70, 150, 150, 65, 80, 15, 70], ["MARZO", "Manualidades", "Adorno de refrigerador", 3, 80, 160, 480, 192, 240, 48, 240], ["MARZO", "Manualidades", "Faomi", 10, 80, 150, 1500, 550, 700, 150, 800], ["MARZO", "Manualidades", "Dulceras", 2, 35, 130, 260, 164, 190, 26, 70], ["MARZO", "Manualidades", "Pozuelos ", 7, 50, 120, 840, 406, 490, 84, 350], ["MARZO", "Manualidades", "Juego de cojines", 1, 1000, 2000, 2000, 800, 1000, 200, 1000], ["MARZO", "Manualidades", "Batas de palitos", 2, 150, 350, 700, 330, 400, 70, 300], ["MARZO", "Manualidades", "Cajas de regalos", 2, 50, 150, 300, 170, 200, 30, 100], ["MARZO", "Manualidades", "Pulso grande", 3, 150, 250, 750, 225, 300, 75, 450], ["MARZO", "Manualidades", "Pulso", 5, 170, 280, 1400, 410, 550, 140, 850], ["MARZO", "Manualidades", "Pulso tejido", 1, 200, 350, 350, 115, 150, 35, 200], ["MARZO", "Manualidades", "Perrito con corazón", 1, 100, 250, 250, 125, 150, 25, 100], ["MARZO", "Manualidades", "Bufanda", 1, 150, 300, 300, 120, 150, 30, 150], ["MARZO", "Manualidades", "Felpas", 4, 60, 80, 320, 48, 80, 32, 240], ["MARZO", "Manualidades", "Delantal", 1, 300, 500, 500, 150, 200, 50, 300], ["MARZO", "Manualidades", "Cartera tejida de celular", 4, 600, 1000, 4000, 1200, 1600, 400, 2400], ["MARZO", "Manualidades", "Cartera tejida de celular", 1, 300, 600, 600, 240, 300, 60, 300], ["MARZO", "Manualidades", "Toalla de cocina", 2, 350, 450, 900, 110, 200, 90, 700], ["MARZO", "Manualidades", "colgante de espejuelos", 2, 150, 300, 600, 240, 300, 60, 300], ["MARZO", "Manualidades", "Perchero chiquito", 2, 150, 300, 600, 240, 300, 60, 300], ["MARZO", "Manualidades", "Brujita chiquita", 2, 250, 380, 760, 184, 260, 76, 500], ["MARZO", "Manualidades", "Pelotas ", 5, 200, 300, 1500, 350, 500, 150, 1000], ["MARZO", "Manualidades", "Juego de yaquis", 1, 200, 300, 300, 70, 100, 30, 200], ["MARZO", "Manualidades", "Creyon", 2, 250, 350, 700, 130, 200, 70, 500], ["MARZO", "Manualidades", "Alfombra", 6, 200, 400, 2400, 960, 1200, 240, 1200], ["MARZO", "Manualidades", "Alfombra grande", 2, 250, 500, 1000, 400, 500, 100, 500], ["MARZO", "Manualidades", "Alfombra tejida", 5, 300, 500, 2500, 750, 1000, 250, 1500], ["MARZO", "Manualidades", "Paquete de Felpa de pelo", 1, 200, 400, 400, 160, 200, 40, 200], ["MARZO", "Manualidades", "Paquete de ligas de pelo", 2, 70, 150, 300, 130, 160, 30, 140], ["MARZO", "Manualidades", "Vasos plásticos 1", 9, 30, 70, 630, 297, 360, 63, 270], ["MARZO", "Manualidades", "Vasos plásticos ", 4, 30, 100, 400, 240, 280, 40, 120], ["MARZO", "Manualidades", "cepillo de lavar", 1, 50, 100, 100, 40, 50, 10, 50], ["MARZO", "Manualidades", "Jaba Rubí", 4, 250, 350, 1400, 260, 400, 140, 1000], ["MARZO", "Manualidades", "Plomo para pescar", 4, 10, 20, 80, 32, 40, 8, 40], ["MARZO", "Manualidades", "Pie de amigo", 1, 300, 600, 600, 240, 300, 60, 300], ["MARZO", "Manualidades", "Anzuelo", 2, 25, 50, 100, 40, 50, 10, 50], ["MARZO", "Manualidades", "Anzuelo no 50", 14, 30, 70, 980, 462, 560, 98, 420], ["MARZO", "Manualidades", "Bucaro chico", 4, 500, 1500, 6000, 3400, 3400, 4000, 600], ["MARZO", "Manualidades", "Goma de borrar", 1, 70, 150, 150, 65, 0, 80, 15], ["ABRIL", "Barro", "Maceta honda 6\"", 9, 77, 200, 1800, 927, 1107, 180, 693], ["ABRIL", "Barro", "Freideras chiquitas", 3, 150, 300, 900, 360, 450, 90, 450], ["ABRIL", "Barro", "Freideras grandes", 6, 107, 450, 2700, 1788, 2058, 270, 642], ["ABRIL", "Barro", "Maceta de 4\"", 6, 57, 100, 600, 198, 258, 60, 342], ["ABRIL", "Barro", "Plato", 2, 107, 200, 400, 146, 186, 40, 214], ["ABRIL", "Barro", "Hongos sencillosThiago", 4, 30, 100, 400, 240, 280, 40, 120], ["ABRIL", "Barro", "Bebedero conejos nuevo", 2, 107, 300, 600, 326, 386, 60, 214], ["ABRIL", "Barro", "Gnomos de molde Thiago", 1, 100, 150, 150, 35, 50, 15, 100], ["ABRIL", "Barro", "Gnomos con hongo Thiago", 2, 100, 250, 500, 250, 300, 50, 200], ["ABRIL", "Barro", "Violetera ", 1, 100, 300, 300, 170, 200, 30, 100], ["ABRIL", "Barro", "Bucaro", 1, 41, 250, 250, 184, 0, 25, 41], ["ABRIL", "Barro", "Cazuela chica", 3, 136, 300, 900, 402, 492, 90, 408], ["ABRIL", "Barro", "Cadenas", 9, 150, 300, 2700, 1080, 1350, 270, 1350], ["ABRIL", "Barro", "Maceta plástica No 20", 19, 20, 50, 950, 475, 570, 95, 380], ["ABRIL", "Barro", "Maceta plástica No 50", 12, 50, 150, 1800, 1020, 1200, 180, 600], ["ABRIL", "Barro", "Maceta plástica No 70", 7, 70, 200, 1400, 770, 910, 140, 490], ["ABRIL", "Barro", "Maceta plástica No 80", 15, 80, 250, 3750, 2175, 2550, 375, 1200], ["ABRIL", "Barro", "Bichitos estoma", 15, 30, 100, 1500, 900, 1050, 150, 450], ["ABRIL", "Barro", "Maceta plástica No 100", 5, 100, 300, 1500, 850, 1000, 150, 500], ["ABRIL", "Barro", "Macetas caritas", 10, 70, 150, 1500, 650, 800, 150, 700], ["ABRIL", "Plantas Ornamentales", "PO Maceta honda ø 12\"  nueva 2", 3, 500, 1000, 3000, 1200, 1500, 300, 1500], ["ABRIL", "Plantas Ornamentales", "PO Maceta honda ø10\"", 3, 300, 700, 2100, 990, 1200, 210, 900], ["ABRIL", "Plantas Ornamentales", "PO Maceta honda ø 8\"", 3, 350, 500, 1500, 300, 450, 150, 1050], ["ABRIL", "Plantas Ornamentales", "PO Maceta honda ø 6\"", 1, 200, 400, 400, 160, 200, 40, 200], ["ABRIL", "Plantas Ornamentales", "PO maceta plast chica", 6, 70, 170, 1020, 498, 600, 102, 420], ["ABRIL", "Plantas Ornamentales", "PO maceta plast mediana", 2, 150, 300, 600, 240, 300, 60, 300], ["ABRIL", "Plantas Ornamentales", "PO maceta plastica ", 1, 200, 400, 400, 160, 200, 40, 200], ["ABRIL", "Plantas Ornamentales", "PO Javier", 2, 70, 150, 300, 130, 160, 30, 140], ["ABRIL", "Plantas Ornamentales", "PO Adenio MHǾ8", 2, 600, 1200, 2400, 960, 1200, 240, 1200], ["ABRIL", "Manualidades", "Jaba de regalos grande", 2, 80, 180, 360, 164, 200, 36, 160], ["ABRIL", "Manualidades", "Tubo de tela de recortes", 1, 200, 400, 400, 160, 200, 40, 200], ["ABRIL", "Manualidades", "Juego de agarraderas", 2, 120, 200, 400, 120, 160, 40, 240], ["ABRIL", "Manualidades", "Juego almohaditas bebe", 1, 350, 700, 700, 280, 350, 70, 350], ["ABRIL", "Manualidades", "Almohadas", 3, 600, 1100, 3300, 1170, 1500, 330, 1800], ["ABRIL", "Manualidades", "Almohadas", 1, 800, 1600, 1600, 640, 800, 160, 800], ["ABRIL", "Manualidades", "Lapiceros", 2, 33, 70, 140, 60, 60, 74, 14], ["ABRIL", "Manualidades", "Cubo grande nuevo", 1, 210, 420, 420, 168, 210, 42, 210], ["ABRIL", "Manualidades", "Home", 1, 850, 1300, 1300, 320, 450, 130, 850], ["ABRIL", "Manualidades", "Cesto baño", 1, 250, 500, 500, 200, 250, 50, 250], ["ABRIL", "Manualidades", "Jaba de mandados ", 2, 100, 200, 400, 160, 200, 40, 200], ["ABRIL", "Manualidades", "Jaba de tela", 3, 150, 250, 750, 225, 300, 75, 450], ["ABRIL", "Manualidades", "Jaba de mandados", 4, 150, 300, 1200, 480, 600, 120, 600], ["ABRIL", "Manualidades", "Cesta mimbre", 1, 150, 300, 300, 120, 150, 30, 150], ["ABRIL", "Manualidades", "Amigurumi chico", 2, 350, 600, 1200, 380, 500, 120, 700], ["ABRIL", "Manualidades", "Amigurumi grande", 1, 700, 1500, 1500, 650, 800, 150, 700], ["ABRIL", "Manualidades", "Vasos plásticos ", 1, 30, 80, 80, 42, 50, 8, 30], ["ABRIL", "Manualidades", "Vasos plásticos ", 5, 30, 100, 500, 300, 350, 50, 150], ["ABRIL", "Manualidades", "Platos plasticos", 5, 50, 150, 750, 425, 500, 75, 250], ["ABRIL", "Manualidades", "Aretes chicos", 2, 100, 150, 300, 70, 100, 30, 200], ["ABRIL", "Manualidades", "Aretes", 1, 150, 300, 300, 120, 150, 30, 150], ["ABRIL", "Manualidades", "Adorno de refrigerador", 5, 80, 160, 800, 320, 400, 80, 400], ["ABRIL", "Manualidades", "Faomi", 34, 80, 150, 5100, 1870, 2380, 510, 2720], ["ABRIL", "Manualidades", "Pozuelitas plásticas", 8, 70, 130, 1040, 376, 480, 104, 560], ["ABRIL", "Manualidades", "Pozuelos ", 1, 50, 120, 120, 58, 70, 12, 50], ["ABRIL", "Manualidades", "Batas de palitos", 1, 150, 350, 350, 165, 200, 35, 150], ["ABRIL", "Manualidades", "Pulso ", 1, 100, 200, 200, 80, 100, 20, 100], ["ABRIL", "Manualidades", "Pulso grande", 1, 150, 250, 250, 75, 100, 25, 150], ["ABRIL", "Manualidades", "Pulso", 2, 170, 280, 560, 164, 220, 56, 340], ["ABRIL", "Manualidades", "Pulso tejido", 1, 200, 350, 350, 115, 150, 35, 200], ["ABRIL", "Manualidades", "Delantal", 1, 300, 500, 500, 150, 200, 50, 300], ["ABRIL", "Manualidades", "Juego de paño y agarraderas", 1, 300, 650, 650, 285, 350, 65, 300], ["ABRIL", "Manualidades", "Cojin", 2, 350, 700, 1400, 560, 700, 140, 700], ["ABRIL", "Manualidades", "Bucaro con flores de faomi", 3, 150, 300, 900, 360, 450, 90, 450], ["ABRIL", "Manualidades", "Colgante de celular ", 1, 150, 300, 300, 120, 150, 30, 150], ["ABRIL", "Manualidades", "Brujita chiquita", 1, 250, 380, 380, 92, 130, 38, 250], ["ABRIL", "Manualidades", "Gallinita tela", 1, 300, 500, 500, 150, 200, 50, 300], ["ABRIL", "Manualidades", "Pelotas ", 3, 200, 300, 900, 210, 300, 90, 600], ["ABRIL", "Manualidades", "Juego de yaquis", 1, 200, 300, 300, 70, 100, 30, 200], ["ABRIL", "Manualidades", "Esponja", 1, 80, 140, 140, 46, 60, 14, 80], ["ABRIL", "Manualidades", "Alfombra", 1, 200, 400, 400, 160, 200, 40, 200], ["ABRIL", "Manualidades", "Alfombra grande", 2, 250, 500, 1000, 400, 500, 100, 500], ["ABRIL", "Manualidades", "Llavero yornaris", 1, 180, 350, 350, 135, 170, 35, 180], ["ABRIL", "Manualidades", "Alfiletero frutas", 1, 50, 100, 100, 40, 50, 10, 50], ["ABRIL", "Manualidades", "Jaba Rubí", 2, 250, 350, 700, 130, 200, 70, 500], ["ABRIL", "Manualidades", "Plomo para pescar", 1, 10, 20, 20, 8, 10, 2, 10], ["ABRIL", "Manualidades", "Titere", 1, 230, 450, 450, 175, 220, 45, 230], ["ABRIL", "Manualidades", "Pie de amigo", 2, 300, 600, 1200, 480, 600, 120, 600], ["ABRIL", "Manualidades", "Anzuelo no 50", 12, 30, 70, 840, 396, 480, 84, 360], ["MAYO", "Barro", "Maceta honda 6\"", 2, 77, 200, 400, 206, 246, 40, 154], ["MAYO", "Barro", "Freideras chiquitas", 2, 150, 300, 600, 240, 300, 60, 300], ["MAYO", "Barro", "Freideras grandes", 4, 107, 450, 1800, 1192, 1372, 180, 428], ["MAYO", "Barro", "Maceta de 4\"", 3, 57, 100, 300, 99, 129, 30, 171], ["MAYO", "Barro", "Hongos sencillosThiago", 3, 30, 100, 300, 180, 210, 30, 90], ["MAYO", "Barro", "Gnomos con hongo Thiago", 2, 100, 250, 500, 250, 300, 50, 200], ["MAYO", "Barro", "Cadenas", 4, 150, 300, 1200, 480, 600, 120, 600], ["MAYO", "Barro", "Maceta plástica No 20", 1, 20, 50, 50, 25, 30, 5, 20], ["MAYO", "Barro", "Maceta plástica No 50", 7, 50, 150, 1050, 595, 700, 105, 350], ["MAYO", "Barro", "Maceta plástica No 70", 4, 70, 200, 800, 440, 520, 80, 280], ["MAYO", "Barro", "Bichitos estoma", 3, 30, 100, 300, 180, 210, 30, 90], ["MAYO", "Barro", "Maceta plástica No 100", 4, 100, 300, 1200, 680, 800, 120, 400], ["MAYO", "Plantas Ornamentales", "PO Maceta ø 4\"", 4, 170, 200, 800, 40, 120, 80, 680], ["MAYO", "Plantas Ornamentales", "PO maceta plastica No 50", 1, 200, 250, 250, 25, 50, 25, 200], ["MAYO", "Plantas Ornamentales", "PO maceta plastica No 70", 1, 200, 400, 400, 160, 200, 40, 200], ["MAYO", "Plantas Ornamentales", "PO maceta plastica No 120", 5, 250, 500, 2500, 1000, 1250, 250, 1250], ["MAYO", "Plantas Ornamentales", "Adenio maceta plástica No120", 1, 1200, 1500, 1500, 150, 300, 150, 1200], ["MAYO", "Manualidades", "Jaba de regalos Alba", 2, 100, 200, 400, 160, 200, 40, 200], ["MAYO", "Manualidades", "Jaba de regalos grande", 1, 100, 180, 180, 62, 80, 18, 100], ["MAYO", "Manualidades", "Jaba de regalos chiquita", 1, 60, 100, 100, 30, 40, 10, 60], ["MAYO", "Manualidades", "Tabla de colgar", 2, 400, 500, 1000, 100, 200, 100, 800], ["MAYO", "Manualidades", "Tubo de tela de recortes", 2, 300, 400, 800, 120, 200, 80, 600], ["MAYO", "Manualidades", "Juego de agarraderas", 6, 200, 250, 1500, 150, 300, 150, 1200], ["MAYO", "Manualidades", "Jaba de mandados ", 1, 150, 200, 200, 30, 50, 20, 150], ["MAYO", "Manualidades", "Sonajero", 1, 1200, 1600, 1600, 240, 400, 160, 1200], ["MAYO", "Manualidades", "Amigurumi ", 1, 600, 1000, 1000, 300, 400, 100, 600], ["MAYO", "Manualidades", "Amigurumi grande", 1, 700, 1500, 1500, 650, 800, 150, 700], ["MAYO", "Manualidades", "Cajas de regalos", 2, 100, 150, 300, 70, 100, 30, 200], ["MAYO", "Manualidades", "Vasos plásticos ", 5, 60, 100, 500, 150, 200, 50, 300], ["MAYO", "Manualidades", "Dulceritas plasticas", 3, 90, 130, 390, 81, 120, 39, 270], ["MAYO", "Manualidades", "Aretes chicos", 1, 100, 150, 150, 35, 50, 15, 100], ["MAYO", "Manualidades", "Bolsita regalo de tela", 1, 100, 150, 150, 35, 50, 15, 100], ["MAYO", "Manualidades", "Colchita de limpiar la meceta", 1, 70, 150, 150, 65, 80, 15, 70], ["MAYO", "Manualidades", "Faomi", 21, 110, 160, 3360, 714, 1050, 336, 2310], ["MAYO", "Manualidades", "Pozuelos ", 2, 50, 120, 240, 116, 140, 24, 100], ["MAYO", "Manualidades", "Pozuelos chicos", 1, 70, 100, 100, 20, 30, 10, 70], ["MAYO", "Manualidades", "Batas de palitos", 1, 250, 400, 400, 110, 150, 40, 250], ["MAYO", "Manualidades", "Pulso grande", 1, 220, 250, 250, 5, 30, 25, 220], ["MAYO", "Manualidades", "Cartelito te amo", 1, 200, 300, 300, 70, 100, 30, 200], ["MAYO", "Manualidades", "Plato plástico", 1, 60, 100, 100, 30, 40, 10, 60], ["MAYO", "Manualidades", "Plato plástico grande", 1, 80, 130, 130, 37, 50, 13, 80], ["MAYO", "Manualidades", "Osito con corazon", 1, 100, 200, 200, 80, 100, 20, 100], ["MAYO", "Manualidades", "Juego de paño y agarraderas", 2, 300, 350, 700, 30, 100, 70, 600], ["MAYO", "Manualidades", "Cojin", 1, 500, 700, 700, 130, 200, 70, 500], ["MAYO", "Manualidades", "Cartera tejida de celular", 1, 600, 1000, 1000, 300, 400, 100, 600], ["MAYO", "Manualidades", "Muñeca de pellizco", 1, 300, 350, 350, 15, 50, 35, 300], ["MAYO", "Manualidades", "Muñeca de trapo", 2, 100, 200, 400, 160, 200, 40, 200], ["MAYO", "Manualidades", "Forro de tarjetade bodega", 1, 70, 100, 100, 20, 30, 10, 70], ["MAYO", "Manualidades", "Abanico", 1, 170, 250, 250, 55, 80, 25, 170], ["MAYO", "Manualidades", "Pelotas trapo", 2, 150, 200, 400, 60, 100, 40, 300], ["MAYO", "Manualidades", "Camión volteo chico", 1, 180, 250, 250, 45, 70, 25, 180], ["MAYO", "Manualidades", "Bate y pelota", 1, 150, 300, 300, 120, 150, 30, 150], ["MAYO", "Manualidades", "Esponja", 1, 80, 140, 140, 46, 60, 14, 80], ["MAYO", "Manualidades", "Alfombra grande", 5, 400, 600, 3000, 700, 1000, 300, 2000], ["MAYO", "Manualidades", "Jaba Rubí", 2, 250, 350, 700, 130, 200, 70, 500], ["MAYO", "Manualidades", "Pie de amigo", 2, 300, 600, 1200, 480, 600, 120, 600], ["MAYO", "Manualidades", "Bucaro chico", 1, 1000, 1500, 1500, 350, 350, 150, 150], ["MAYO", "Manualidades", "Goma de borrar", 1, 70, 150, 150, 65, 0, 15, 15], ["JUNIO", "Barro", "Maceta honda 12\" nueva", 3, 700, 1200, 3600, 1140, 1500, 360, 2100], ["JUNIO", "Barro", "Maceta honda 10\"", 6, 700, 900, 5400, 660, 1200, 540, 4200], ["JUNIO", "Barro", "Maceta honda 6\"", 2, 100, 200, 400, 160, 200, 40, 200], ["JUNIO", "Barro", "Maceta jardinera 6\"", 1, 150, 300, 300, 120, 150, 30, 150], ["JUNIO", "Barro", "Freideras chiquitas", 1, 150, 300, 300, 120, 150, 30, 150], ["JUNIO", "Barro", "Freideras grandes", 4, 300, 450, 1800, 420, 600, 180, 1200], ["JUNIO", "Barro", "Maceta de 4\"", 2, 57, 100, 200, 66, 86, 20, 114], ["JUNIO", "Barro", "Hongos sencillosThiago", 4, 30, 100, 400, 240, 280, 40, 120], ["JUNIO", "Barro", "Bebedero de aves de plastico", 1, 150, 200, 200, 30, 50, 20, 150], ["JUNIO", "Barro", "Bebedero de aves de plastico grande", 1, 200, 250, 250, 25, 50, 25, 200], ["JUNIO", "Barro", "Bebedero conejos nuevo", 4, 107, 300, 1200, 652, 772, 120, 428], ["JUNIO", "Barro", "Comedero de aves de plastico", 1, 50, 100, 100, 40, 50, 10, 50], ["JUNIO", "Barro", "Gnomos con hongo Thiago", 3, 100, 250, 750, 375, 450, 75, 300], ["JUNIO", "Barro", "Violetera ", 2, 100, 300, 600, 340, 400, 60, 200], ["JUNIO", "Barro", "Cazuela chica", 1, 136, 300, 300, 134, 164, 30, 136], ["JUNIO", "Barro", "Maceta plástica No 20", 5, 20, 50, 250, 125, 150, 25, 100], ["JUNIO", "Barro", "Maceta plástica No 50", 7, 50, 150, 1050, 595, 700, 105, 350], ["JUNIO", "Barro", "Maceta plástica No 80", 6, 80, 250, 1500, 870, 1020, 150, 480], ["JUNIO", "Barro", "Bichitos estoma", 4, 50, 100, 400, 160, 200, 40, 200], ["JUNIO", "Barro", "Maceta plástica No 100", 6, 120, 350, 2100, 1170, 1380, 210, 720], ["JUNIO", "Barro", "Maceta plástica No 100", 5, 40, 100, 500, 250, 300, 50, 200], ["JUNIO", "Plantas Ornamentales", "PO Maceta honda ø 12\"", 1, 600, 800, 800, 120, 200, 80, 600], ["JUNIO", "Plantas Ornamentales", "PO Maceta honda ø 12\"  nueva", 1, 500, 900, 900, 310, 400, 90, 500], ["JUNIO", "Plantas Ornamentales", "PO maceta plastica No 50", 2, 200, 250, 500, 50, 100, 50, 400], ["JUNIO", "Manualidades", "Jaba de regalos Alba", 1, 100, 200, 200, 80, 100, 20, 100], ["JUNIO", "Manualidades", "Tabla de colgar", 1, 400, 500, 500, 50, 100, 50, 400], ["JUNIO", "Manualidades", "Cinta de pelo tejida", 1, 100, 150, 150, 35, 50, 15, 100], ["JUNIO", "Manualidades", "Pelota de tela", 1, 200, 300, 300, 70, 100, 30, 200], ["JUNIO", "Manualidades", "Tubo de tela de recortes", 3, 350, 500, 1500, 300, 450, 150, 1050], ["JUNIO", "Manualidades", "Juego de agarraderas", 2, 200, 250, 500, 50, 100, 50, 400], ["JUNIO", "Manualidades", "Lapiceros", 9, 25, 60, 540, 261, 261, 315, 54], ["JUNIO", "Manualidades", "Cubo grande", 1, 400, 600, 600, 140, 200, 60, 400], ["JUNIO", "Manualidades", "Jaba de mandados", 1, 150, 300, 300, 120, 150, 30, 150], ["JUNIO", "Manualidades", "Jaba de nylon grande", 1, 100, 250, 250, 125, 150, 25, 100], ["JUNIO", "Manualidades", "Amigurumi ", 1, 600, 1200, 1200, 480, 600, 120, 600], ["JUNIO", "Manualidades", "Amigurumi grande", 1, 700, 1500, 1500, 650, 800, 150, 700], ["JUNIO", "Manualidades", "Vasos plásticos ", 1, 30, 80, 80, 42, 50, 8, 30], ["JUNIO", "Manualidades", "Platos plasticos", 2, 50, 150, 300, 170, 200, 30, 100], ["JUNIO", "Manualidades", "Dulceritas plasticas", 6, 90, 130, 780, 162, 240, 78, 540], ["JUNIO", "Manualidades", "Aretes", 2, 200, 400, 800, 320, 400, 80, 400], ["JUNIO", "Manualidades", "Bolsita regalo de tela", 1, 100, 150, 150, 35, 50, 15, 100], ["JUNIO", "Manualidades", "Colchita de limpiar la meceta", 1, 70, 150, 150, 65, 80, 15, 70], ["JUNIO", "Manualidades", "Adorno de refrigerador", 6, 80, 160, 960, 384, 480, 96, 480], ["JUNIO", "Manualidades", "Faomi", 25, 110, 160, 4000, 850, 1250, 400, 2750], ["JUNIO", "Manualidades", "Pulso tejido", 1, 200, 350, 350, 115, 150, 35, 200], ["JUNIO", "Manualidades", "Bolsa de regalos", 1, 150, 200, 200, 30, 50, 20, 150], ["JUNIO", "Manualidades", "Felpas", 1, 60, 80, 80, 12, 20, 8, 60], ["JUNIO", "Manualidades", "Delantal niño", 4, 350, 500, 2000, 400, 600, 200, 1400], ["JUNIO", "Manualidades", "Cojin de circulo infantil", 2, 300, 500, 1000, 300, 400, 100, 600], ["JUNIO", "Manualidades", "Toalla de cocina", 2, 350, 500, 1000, 200, 300, 100, 700], ["JUNIO", "Manualidades", "Jarra de plastica con tapa", 2, 350, 500, 1000, 200, 300, 100, 700], ["JUNIO", "Manualidades", "Plumones", 2, 70, 150, 300, 130, 160, 30, 140], ["JUNIO", "Manualidades", "Esponja", 1, 80, 140, 140, 46, 60, 14, 80], ["JUNIO", "Manualidades", "Alfombra grande", 8, 400, 600, 4800, 1120, 1600, 480, 3200], ["JUNIO", "Manualidades", "Jaba Rubí", 1, 250, 350, 350, 65, 100, 35, 250], ["JUNIO", "Manualidades", "Titere", 1, 230, 450, 450, 175, 220, 45, 230], ["JUNIO", "Manualidades", "Pie de amigo portamaceta", 3, 300, 600, 1800, 720, 900, 180, 900], ["JUNIO", "Manualidades", "Marcadores de cartulina", 5, 10, 20, 100, 40, 0, 50, 10], ["JUNIO", "Manualidades", "Mochila de circulo", 3, 350, 500, 1500, 300, 0, 450, 150]];
+
+function loadEmbedded(){
+  RAW = EMBEDDED_DATA.map(([month, cat, prod, qty, pcost, pventa, importe, gdi, gai, imp, cost]) => ({ month, cat, prod, qty, pcost, pventa, importe, cost }));
+  fileStatus.textContent = `Fichero-venta-2026.xlsx · ${RAW.length} filas (datos iniciales)`;
+  fileStatus.classList.remove('hidden');
+  emptyState.classList.add('hidden');
+  dashboardRoot.classList.remove('hidden');
+  populateFilterOptions();
+  renderAll();
+}
+
+if (EMBEDDED_DATA && EMBEDDED_DATA.length){
+  loadEmbedded();
+} else {
+  emptyState.classList.remove('hidden');
+  dashboardRoot.classList.add('hidden');
+}
+</script>
+</body>
+</html>
